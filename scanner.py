@@ -2,19 +2,30 @@ import requests
 import pandas as pd
 
 from config import (
+    EGX_STOCKS,
     SHARIA_EGX_STOCKS,
-    MIN_SCORE_THRESHOLD
+    MIN_SCORE_THRESHOLD,
+    MIN_AVG_DAILY_VALUE,
+    MIN_AVG_VOLUME
 )
 
 from indicators import calculate_indicators
 from strategy import evaluate_stock_strategy
 
 
+# ==========================================================
+# Yahoo Finance API
+# ==========================================================
+
 YAHOO_URL = (
     "https://query1.finance.yahoo.com/"
     "v8/finance/chart/"
 )
 
+
+# ==========================================================
+# Get Stock Data
+# ==========================================================
 
 def get_stock_data(symbol):
 
@@ -48,8 +59,14 @@ def get_stock_data(symbol):
 
         data = response.json()
 
-        chart = data.get("chart", {})
-        error = chart.get("error")
+        chart = data.get(
+            "chart",
+            {}
+        )
+
+        error = chart.get(
+            "error"
+        )
 
         if error:
 
@@ -59,7 +76,9 @@ def get_stock_data(symbol):
 
             return None
 
-        results = chart.get("result")
+        results = chart.get(
+            "result"
+        )
 
         if not results:
 
@@ -71,7 +90,9 @@ def get_stock_data(symbol):
 
         result = results[0]
 
-        timestamps = result.get("timestamp")
+        timestamps = result.get(
+            "timestamp"
+        )
 
         indicators = result.get(
             "indicators",
@@ -181,31 +202,127 @@ def get_stock_data(symbol):
         return None
 
 
+# ==========================================================
+# Liquidity Filter
+# ==========================================================
+
+def passes_liquidity_filter(df):
+
+    try:
+
+        if df is None or df.empty:
+            return False
+
+        if len(df) < 20:
+            return False
+
+        recent = df.tail(20).copy()
+
+        average_volume = (
+            recent["Volume"]
+            .mean()
+        )
+
+        average_daily_value = (
+            recent["Close"] *
+            recent["Volume"]
+        ).mean()
+
+        if (
+            average_volume <
+            MIN_AVG_VOLUME
+        ):
+
+            return False
+
+        if (
+            average_daily_value <
+            MIN_AVG_DAILY_VALUE
+        ):
+
+            return False
+
+        return True
+
+    except (
+        TypeError,
+        ValueError,
+        KeyError
+    ):
+
+        return False
+
+
+# ==========================================================
+# Scan Market
+# ==========================================================
+
 def scan_market():
 
     opportunities = []
+
+    total_stocks = len(
+        EGX_STOCKS
+    )
+
+    sharia_stocks = set(
+        SHARIA_EGX_STOCKS
+    )
 
     print(
         "\n===================================="
     )
 
     print(
-        "🔎 Starting EGX Market Scan"
+        "🔎 Starting FULL EGX Market Scan"
+    )
+
+    print(
+        f"📊 EGX Universe: {total_stocks} stocks"
+    )
+
+    print(
+        f"☪️ Sharia Filter: "
+        f"{len(sharia_stocks)} stocks"
     )
 
     print(
         "====================================\n"
     )
 
-    for symbol in SHARIA_EGX_STOCKS:
+
+    # ==========================================================
+    # Scan Every EGX Stock
+    # ==========================================================
+
+    for index, symbol in enumerate(
+        EGX_STOCKS,
+        start=1
+    ):
 
         print(
+            f"[{index}/{total_stocks}] "
             f"📊 Scanning {symbol}..."
         )
 
-        # ==========================================================
+
+        # ======================================================
+        # Sharia Filter
+        # ======================================================
+
+        if symbol not in sharia_stocks:
+
+            print(
+                f"☪️ {symbol} "
+                f"→ غير موجود في قائمة التوافق الشرعي"
+            )
+
+            continue
+
+
+        # ======================================================
         # Get Market Data
-        # ==========================================================
+        # ======================================================
 
         df = get_stock_data(
             symbol
@@ -219,9 +336,26 @@ def scan_market():
 
             continue
 
-        # ==========================================================
+
+        # ======================================================
+        # Liquidity Filter
+        # ======================================================
+
+        if not passes_liquidity_filter(
+            df
+        ):
+
+            print(
+                f"💧 {symbol} "
+                f"→ السيولة أقل من الحد المطلوب"
+            )
+
+            continue
+
+
+        # ======================================================
         # Calculate Technical Indicators
-        # ==========================================================
+        # ======================================================
 
         df = calculate_indicators(
             df
@@ -230,14 +364,16 @@ def scan_market():
         if df is None or df.empty:
 
             print(
-                f"⚠️ Could not calculate indicators for {symbol}"
+                f"⚠️ Could not calculate indicators "
+                f"for {symbol}"
             )
 
             continue
 
-        # ==========================================================
+
+        # ======================================================
         # Evaluate Complete Strategy
-        # ==========================================================
+        # ======================================================
 
         analysis = evaluate_stock_strategy(
             df,
@@ -247,23 +383,28 @@ def scan_market():
         if analysis is None:
 
             print(
-                f"❌ No valid signal for {symbol}"
+                f"❌ {symbol} "
+                f"→ لا توجد إشارة صالحة"
             )
 
             continue
 
-        # ==========================================================
-        # Score
-        # ==========================================================
 
-        score = analysis.get(
-            "score",
-            0
+        # ======================================================
+        # Score
+        # ======================================================
+
+        score = int(
+            analysis.get(
+                "score",
+                0
+            )
         )
 
-        # ==========================================================
+
+        # ======================================================
         # Minimum Score Filter
-        # ==========================================================
+        # ======================================================
 
         if score >= MIN_SCORE_THRESHOLD:
 
@@ -285,9 +426,10 @@ def scan_market():
                 f"(below threshold)"
             )
 
-    # ==============================================================
-    # Sort By Score
-    # ==============================================================
+
+    # ==========================================================
+    # Sort Opportunities
+    # ==========================================================
 
     opportunities.sort(
         key=lambda x: x.get(
@@ -297,21 +439,37 @@ def scan_market():
         reverse=True
     )
 
-    # ==============================================================
+
+    # ==========================================================
     # Final Report
-    # ==============================================================
+    # ==========================================================
 
     print(
         "\n===================================="
     )
 
     print(
-        f"🏆 Scan completed: "
-        f"{len(opportunities)} opportunities"
+        "🏆 FULL EGX SCAN COMPLETED"
+    )
+
+    print(
+        f"📊 Universe: "
+        f"{total_stocks} stocks"
+    )
+
+    print(
+        f"☪️ Sharia Universe: "
+        f"{len(sharia_stocks)} stocks"
+    )
+
+    print(
+        f"🎯 Final Opportunities: "
+        f"{len(opportunities)}"
     )
 
     print(
         "====================================\n"
     )
+
 
     return opportunities
