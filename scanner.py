@@ -6,7 +6,8 @@ from config import (
     MIN_SCORE_THRESHOLD
 )
 
-from indicators import analyze_stock
+from indicators import calculate_indicators
+from strategy import evaluate_stock_strategy
 
 
 YAHOO_URL = (
@@ -18,6 +19,7 @@ YAHOO_URL = (
 def get_stock_data(symbol):
 
     try:
+
         url = (
             f"{YAHOO_URL}{symbol}"
             f"?interval=1d"
@@ -50,39 +52,58 @@ def get_stock_data(symbol):
         error = chart.get("error")
 
         if error:
+
             print(
                 f"Yahoo error for {symbol}: {error}"
             )
+
             return None
 
         results = chart.get("result")
 
         if not results:
+
             print(
                 f"No Yahoo data available for {symbol}"
             )
+
             return None
 
         result = results[0]
 
         timestamps = result.get("timestamp")
-        indicators = result.get("indicators", {})
-        quotes = indicators.get("quote")
+
+        indicators = result.get(
+            "indicators",
+            {}
+        )
+
+        quotes = indicators.get(
+            "quote"
+        )
 
         if not timestamps or not quotes:
+
             print(
                 f"Invalid Yahoo data for {symbol}"
             )
+
             return None
 
         quote = quotes[0]
 
         df = pd.DataFrame({
+
             "Open": quote.get("open"),
+
             "High": quote.get("high"),
+
             "Low": quote.get("low"),
+
             "Close": quote.get("close"),
+
             "Volume": quote.get("volume")
+
         })
 
         df.index = pd.to_datetime(
@@ -107,27 +128,35 @@ def get_stock_data(symbol):
             )
         ]
 
-        df.sort_index(inplace=True)
+        df.sort_index(
+            inplace=True
+        )
 
         if len(df) < 220:
+
             print(
                 f"Not enough data for {symbol}: "
                 f"{len(df)} rows"
             )
+
             return None
 
         return df
 
     except requests.exceptions.Timeout:
+
         print(
             f"⏱️ Timeout while fetching {symbol}"
         )
+
         return None
 
     except requests.exceptions.RequestException as e:
+
         print(
             f"🌐 Network error for {symbol}: {e}"
         )
+
         return None
 
     except (
@@ -136,15 +165,19 @@ def get_stock_data(symbol):
         TypeError,
         ValueError
     ) as e:
+
         print(
             f"📊 Data parsing error for {symbol}: {e}"
         )
+
         return None
 
     except Exception as e:
+
         print(
             f"❌ Unexpected error for {symbol}: {e}"
         )
+
         return None
 
 
@@ -155,9 +188,11 @@ def scan_market():
     print(
         "\n===================================="
     )
+
     print(
         "🔎 Starting EGX Market Scan"
     )
+
     print(
         "====================================\n"
     )
@@ -168,29 +203,67 @@ def scan_market():
             f"📊 Scanning {symbol}..."
         )
 
-        df = get_stock_data(symbol)
+        # ==========================================================
+        # Get Market Data
+        # ==========================================================
+
+        df = get_stock_data(
+            symbol
+        )
 
         if df is None or df.empty:
+
             print(
                 f"⚠️ Skipping {symbol}"
             )
+
             continue
 
-        analysis = analyze_stock(
+        # ==========================================================
+        # Calculate Technical Indicators
+        # ==========================================================
+
+        df = calculate_indicators(
+            df
+        )
+
+        if df is None or df.empty:
+
+            print(
+                f"⚠️ Could not calculate indicators for {symbol}"
+            )
+
+            continue
+
+        # ==========================================================
+        # Evaluate Complete Strategy
+        # ==========================================================
+
+        analysis = evaluate_stock_strategy(
             df,
             symbol
         )
 
         if analysis is None:
+
             print(
                 f"❌ No valid signal for {symbol}"
             )
+
             continue
+
+        # ==========================================================
+        # Score
+        # ==========================================================
 
         score = analysis.get(
             "score",
             0
         )
+
+        # ==========================================================
+        # Minimum Score Filter
+        # ==========================================================
 
         if score >= MIN_SCORE_THRESHOLD:
 
@@ -200,7 +273,8 @@ def scan_market():
 
             print(
                 f"✅ Opportunity found: "
-                f"{symbol} Score={score}"
+                f"{symbol} "
+                f"Score={score}"
             )
 
         else:
@@ -211,6 +285,10 @@ def scan_market():
                 f"(below threshold)"
             )
 
+    # ==============================================================
+    # Sort By Score
+    # ==============================================================
+
     opportunities.sort(
         key=lambda x: x.get(
             "score",
@@ -219,13 +297,19 @@ def scan_market():
         reverse=True
     )
 
+    # ==============================================================
+    # Final Report
+    # ==============================================================
+
     print(
         "\n===================================="
     )
+
     print(
         f"🏆 Scan completed: "
         f"{len(opportunities)} opportunities"
     )
+
     print(
         "====================================\n"
     )
