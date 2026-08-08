@@ -82,6 +82,8 @@ def evaluate_stock_strategy(df, ticker_symbol):
             or ema20 <= 0
             or ema50 <= 0
             or atr <= 0
+            or resistance <= 0
+            or support <= 0
         ):
             return None
 
@@ -96,10 +98,16 @@ def evaluate_stock_strategy(df, ticker_symbol):
                 df["Close"].iloc[-22]
             )
 
-            return_1m = (
-                (close_price - price_1m_ago)
-                / price_1m_ago
-            ) * 100
+            if price_1m_ago > 0:
+
+                return_1m = (
+                    (close_price - price_1m_ago)
+                    / price_1m_ago
+                ) * 100
+
+            else:
+
+                return_1m = 0
 
         else:
 
@@ -116,10 +124,16 @@ def evaluate_stock_strategy(df, ticker_symbol):
                 df["Close"].iloc[-43]
             )
 
-            return_2m = (
-                (close_price - price_2m_ago)
-                / price_2m_ago
-            ) * 100
+            if price_2m_ago > 0:
+
+                return_2m = (
+                    (close_price - price_2m_ago)
+                    / price_2m_ago
+                ) * 100
+
+            else:
+
+                return_2m = 0
 
         else:
 
@@ -182,20 +196,34 @@ def evaluate_stock_strategy(df, ticker_symbol):
         bullish_1m = return_1m > 0
         bullish_2m = return_2m > 0
 
-        strong_1m = return_1m >= 3
-        strong_2m = return_2m >= 5
+        strong_1m = return_1m >= 5
+        strong_2m = return_2m >= 8
 
-        if strong_1m and strong_2m:
+        if (
+            strong_1m
+            and strong_2m
+            and ma200_slope > 0
+            and ema50_slope > 0
+        ):
 
-            trend_status = "🟢 اتجاه صاعد قوي"
+            trend_status = "🟢 اتجاه صاعد قوي للشهر والشهرين"
+
+        elif (
+            bullish_1m
+            and bullish_2m
+            and ma200_slope > 0
+            and ema50_slope > 0
+        ):
+
+            trend_status = "🟢 اتجاه صاعد مستمر للشهر والشهرين"
 
         elif bullish_1m and bullish_2m:
 
-            trend_status = "🟢 اتجاه صاعد مستمر"
+            trend_status = "🟡 اتجاه صاعد للشهر والشهرين"
 
         elif bullish_1m:
 
-            trend_status = "🟡 صاعد قصير المدى"
+            trend_status = "🟡 صاعد على مدى شهر"
 
         elif bullish_2m:
 
@@ -207,6 +235,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
 
         # ==========================================================
         # Score
+        # الحد الأقصى = 100
         # ==========================================================
 
         score = 0
@@ -229,7 +258,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
             score += 5
 
             reasons.append(
-                f"📈 MA200 في اتجاه صاعد ({ma200_slope:.1f}%)"
+                f"📈 MA200 في اتجاه صاعد ({ma200_slope:+.1f}%)"
             )
 
         # ==========================================================
@@ -249,7 +278,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
             score += 5
 
             reasons.append(
-                f"📈 EMA50 صاعد ({ema50_slope:.1f}%)"
+                f"📈 EMA50 في اتجاه صاعد ({ema50_slope:+.1f}%)"
             )
 
         # ==========================================================
@@ -261,7 +290,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
             score += 10
 
             reasons.append(
-                f"🚀 أداء الشهر إيجابي (+{return_1m:.1f}%)"
+                f"🚀 أداء الشهر قوي (+{return_1m:.1f}%)"
             )
 
         elif return_1m > 0:
@@ -270,6 +299,12 @@ def evaluate_stock_strategy(df, ticker_symbol):
 
             reasons.append(
                 f"🟢 أداء الشهر إيجابي (+{return_1m:.1f}%)"
+            )
+
+        else:
+
+            reasons.append(
+                f"🔴 أداء الشهر سلبي ({return_1m:.1f}%)"
             )
 
         # ==========================================================
@@ -281,7 +316,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
             score += 10
 
             reasons.append(
-                f"🚀 اتجاه الشهرين قوي (+{return_2m:.1f}%)"
+                f"🚀 أداء الشهرين قوي (+{return_2m:.1f}%)"
             )
 
         elif return_2m > 0:
@@ -290,6 +325,12 @@ def evaluate_stock_strategy(df, ticker_symbol):
 
             reasons.append(
                 f"🟢 أداء الشهرين إيجابي (+{return_2m:.1f}%)"
+            )
+
+        else:
+
+            reasons.append(
+                f"🔴 أداء الشهرين سلبي ({return_2m:.1f}%)"
             )
 
         # ==========================================================
@@ -336,6 +377,12 @@ def evaluate_stock_strategy(df, ticker_symbol):
 
             reasons.append(
                 f"⚠️ RSI مرتفع جدًا ({rsi:.1f})"
+            )
+
+        elif rsi < 40:
+
+            reasons.append(
+                f"⚠️ RSI منخفض ({rsi:.1f})"
             )
 
         # ==========================================================
@@ -395,10 +442,28 @@ def evaluate_stock_strategy(df, ticker_symbol):
             )
 
         # ==========================================================
-        # Candlestick Confirmation
+        # Breakout - 5 Points
         # ==========================================================
 
-        candle_reasons = analyze_candlesticks(df)
+        breakout = (
+            close_price > resistance
+        )
+
+        if breakout:
+
+            score += 5
+
+            reasons.append(
+                "🎯 السعر اخترق مقاومة الـ20 جلسة"
+            )
+
+        # ==========================================================
+        # Candlestick Confirmation - 5 Points
+        # ==========================================================
+
+        candle_reasons = analyze_candlesticks(
+            df
+        )
 
         if candle_reasons:
 
@@ -412,13 +477,16 @@ def evaluate_stock_strategy(df, ticker_symbol):
             )
 
         # ==========================================================
-        # Score Limit
+        # Final Score
         # ==========================================================
 
-        score = min(score, 100)
+        score = min(
+            score,
+            100
+        )
 
         # ==========================================================
-        # Entry Analysis
+        # Distance From EMA20
         # ==========================================================
 
         distance_from_ema = (
@@ -426,19 +494,17 @@ def evaluate_stock_strategy(df, ticker_symbol):
             / ema20
         ) * 100
 
-        overextended = distance_from_ema > 5
-
         # ==========================================================
-        # Breakout
+        # Entry Analysis
         # ==========================================================
 
-        breakout = close_price > resistance
+        overextended = (
+            distance_from_ema > 5
+        )
 
-        if breakout:
-
-            reasons.append(
-                "🎯 السعر اخترق مقاومة الـ20 جلسة"
-            )
+        too_far_below_ema = (
+            distance_from_ema < -8
+        )
 
         # ==========================================================
         # Ideal Entry Zone
@@ -476,26 +542,39 @@ def evaluate_stock_strategy(df, ticker_symbol):
 
         if overextended:
 
-            entry_status = "🟡 WAIT - السعر ممتد"
+            entry_status = (
+                "🟡 WAIT - السعر ممتد فوق EMA20"
+            )
+
+        elif too_far_below_ema:
+
+            entry_status = (
+                "🟡 WAIT - السعر أسفل مناطق الدعم"
+            )
+
+        elif breakout:
+
+            entry_status = (
+                "🟢 BUY - Breakout"
+            )
 
         elif (
             close_price >= ideal_entry
             and close_price <= entry_high * 1.02
         ):
 
-            entry_status = "🟢 BUY ZONE"
-
-        elif breakout:
-
-            entry_status = "🟢 BUY - Breakout"
+            entry_status = (
+                "🟢 BUY ZONE"
+            )
 
         else:
 
-            entry_status = "🟡 WATCH"
+            entry_status = (
+                "🟡 WATCH - انتظار نقطة دخول أفضل"
+            )
 
         # ==========================================================
         # Risk Management
-        # مهم: تمرير Support إلى risk.py
         # ==========================================================
 
         risk = calculate_risk_management(
@@ -523,7 +602,27 @@ def evaluate_stock_strategy(df, ticker_symbol):
         if score < MIN_SCORE_THRESHOLD:
 
             recommendation = (
-                "🔴 AVOID / لا توجد إشارة شراء كافية"
+                "🔴 لا توجد إشارة شراء كافية"
+            )
+
+        elif (
+            score >= 90
+            and trend_status.startswith("🟢")
+            and entry_status.startswith("🟢")
+        ):
+
+            recommendation = (
+                "🔥 شراء قوي جداً"
+            )
+
+        elif (
+            score >= 85
+            and trend_status.startswith("🟢")
+            and entry_status.startswith("🟢")
+        ):
+
+            recommendation = (
+                "🟢 فرصة شراء قوية"
             )
 
         elif (
@@ -532,13 +631,13 @@ def evaluate_stock_strategy(df, ticker_symbol):
         ):
 
             recommendation = (
-                "🟢 BUY - شراء"
+                "🟡 فرصة شراء جيدة"
             )
 
         elif trend_status.startswith("🟢"):
 
             recommendation = (
-                "🟡 WATCH - الاتجاه قوي وانتظر دخول أفضل"
+                "🟡 WATCH - الاتجاه جيد وانتظر دخول أفضل"
             )
 
         else:
