@@ -2,8 +2,8 @@ name: Daily EGX Stock Scanner
 
 on:
   schedule:
-    - cron: '30 14 * * *'  # يعمل يومياً الساعة 2:30 ظهراً بتوقيت مصر
-  workflow_dispatch:      # يتيح لك تشغيله يدوياً متى شئت بضغطة زر
+    - cron: '30 14 * * *'
+  workflow_dispatch:
 
 jobs:
   run-bot:
@@ -23,6 +23,4 @@ jobs:
 
       - name: Run Bot Scanner
         run: python main.py
-        env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
+
