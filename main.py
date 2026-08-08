@@ -10,12 +10,20 @@ def main():
 
     try:
 
+        # ==========================================================
+        # Scan Full EGX Market
+        # ==========================================================
+
         opportunities = scan_market()
 
         print(
             f"📊 Scan completed. "
             f"Found {len(opportunities)} opportunities."
         )
+
+        # ==========================================================
+        # Send Telegram Report
+        # ==========================================================
 
         send_scanner_report(
             opportunities
