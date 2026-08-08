@@ -6,10 +6,18 @@ from config import (
 )
 
 
+# ==========================================================
+# Telegram Bot
+# ==========================================================
+
 bot = telebot.TeleBot(
     TELEGRAM_TOKEN
 )
 
+
+# ==========================================================
+# Send Scanner Report
+# ==========================================================
 
 def send_scanner_report(opportunities):
 
@@ -40,7 +48,8 @@ def send_scanner_report(opportunities):
         current_message = (
             "🏆 *تقرير التحليل الذكي للسوق المصري EGX*\n\n"
             "📈 *الاستراتيجية: شهر + شهرين*\n"
-            "🎯 *الهدف: اختيار السهم + توقيت الدخول*\n\n"
+            "🎯 *الهدف: اختيار السهم + توقيت الدخول*\n"
+            "☪️ *بعد فلتر التوافق الشرعي والسيولة*\n\n"
         )
 
 
@@ -287,10 +296,24 @@ def send_scanner_report(opportunities):
             # Trend Interpretation
             # ======================================================
 
-            if return_1m > 0 and return_2m > 0:
+            if (
+                return_1m > 0
+                and return_2m > 0
+                and ma200_slope > 0
+                and ema50_slope > 0
+            ):
 
                 trend_message = (
-                    "🟢 الاتجاه إيجابي على المدى المتوسط"
+                    "🟢 الاتجاه إيجابي ومتوافق للشهر والشهرين"
+                )
+
+            elif (
+                return_1m > 0
+                and return_2m > 0
+            ):
+
+                trend_message = (
+                    "🟢 الاتجاه إيجابي للشهر والشهرين"
                 )
 
             elif return_2m > 0:
@@ -299,10 +322,45 @@ def send_scanner_report(opportunities):
                     "🟡 الاتجاه إيجابي على مدى شهرين"
                 )
 
+            elif return_1m > 0:
+
+                trend_message = (
+                    "🟡 الاتجاه إيجابي على مدى شهر"
+                )
+
             else:
 
                 trend_message = (
-                    "⚠️ الاتجاه يحتاج متابعة"
+                    "🔴 الاتجاه يحتاج متابعة"
+                )
+
+
+            # ======================================================
+            # Score Interpretation
+            # ======================================================
+
+            if score >= 90:
+
+                score_message = (
+                    "🔥 تقييم استثنائي"
+                )
+
+            elif score >= 85:
+
+                score_message = (
+                    "🟢 تقييم قوي"
+                )
+
+            elif score >= 75:
+
+                score_message = (
+                    "🟡 تقييم جيد"
+                )
+
+            else:
+
+                score_message = (
+                    "⚪ تقييم ضعيف"
                 )
 
 
@@ -315,6 +373,9 @@ def send_scanner_report(opportunities):
                 f"📌 *السهم:* `{ticker}`\n"
 
                 f"⭐ *Score:* `{score}/100`\n"
+
+                f"📊 *تقييم النظام:* "
+                f"{score_message}\n"
 
                 f"🎯 *التوصية:* "
                 f"{recommendation}\n\n"
@@ -529,7 +590,7 @@ def send_scanner_report(opportunities):
 
         print(
             "✅ تم إرسال تقرير التحليل "
-            "والدخول وإدارة المخاطر بنجاح."
+            "والاتجاه والدخول وإدارة المخاطر بنجاح."
         )
 
 
@@ -537,4 +598,4 @@ def send_scanner_report(opportunities):
 
         print(
             f"❌ Error sending report: {e}"
-                )
+        )
