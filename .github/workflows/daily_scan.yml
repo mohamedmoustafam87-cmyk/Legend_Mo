@@ -21,7 +21,6 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install pyTelegramBotAPI requests pandas numpy
-          pip install git+https://github.com/twopirllc/pandas-ta.git
 
       - name: Run Bot Scanner
         run: python main.py
