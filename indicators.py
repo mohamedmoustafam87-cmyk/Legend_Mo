@@ -4,11 +4,9 @@ def calculate_indicators(df):
     if df is None or len(df) < 30:
         return None
     
-    # حساب المتوسطات المتحركة ببساطة وسرعة
     df['SMA_50'] = df['Close'].rolling(window=50).mean()
     df['SMA_200'] = df['Close'].rolling(window=200).mean()
     
-    # حساب مؤشر القوة النسبية RSI يدوياً وبدقة
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -26,7 +24,6 @@ def analyze_stock(df, symbol):
     score = 50
     reasons = []
     
-    # تحليل RSI
     if 'RSI' in df.columns and not pd.isna(last['RSI']):
         if last['RSI'] < 40:
             score += 15
@@ -41,4 +38,3 @@ def analyze_stock(df, symbol):
         'score': score,
         'reasons': reasons
     }
-        return None
