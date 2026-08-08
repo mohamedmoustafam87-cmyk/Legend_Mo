@@ -1,37 +1,44 @@
 import pandas as pd
-import pandas_ta as ta
 
-def calculate_all_indicators(df, ticker_symbol):
-    try:
-        if df.empty or len(df) < 200:
-            return None
+def calculate_indicators(df):
+    if df is None or len(df) < 30:
+        return None
+    
+    # حساب المتوسطات المتحركة ببساطة وسرعة
+    df['SMA_50'] = df['Close'].rolling(window=50).mean()
+    df['SMA_200'] = df['Close'].rolling(window=200).mean()
+    
+    # حساب مؤشر القوة النسبية RSI يدوياً وبدقة
+    delta = df['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['RSI'] = 100 - (100 / (1 + rs))
+    
+    return df
 
-        if isinstance(df.columns, pd.MultiIndex):
-            df = df.xs(ticker_symbol, axis=1, level=1)
-
-        df['MA_200'] = ta.sma(df['Close'], length=200)
-        df['EMA_20'] = ta.ema(df['Close'], length=20)
-        df['EMA_50'] = ta.ema(df['Close'], length=50)
-        df['RSI_14'] = ta.rsi(df['Close'], length=14)
-        
-        macd_df = ta.macd(df['Close'], fast=12, slow=26, signal=9)
-        if macd_df is not None and not macd_df.empty:
-            df['MACD'] = macd_df['MACD_12_26_9']
-            df['MACD_signal'] = macd_df['MACDs_12_26_9']
-        else:
-            return None
-
-        adx_df = ta.adx(df['High'], df['Low'], df['Close'], length=14)
-        if adx_df is not None and not adx_df.empty:
-            df['ADX'] = adx_df['ADX_14']
-        else:
-            return None
-
-        df['ATR'] = ta.atr(df['High'], df['Low'], df['Close'], length=14)
-        df['Resistance_20'] = df['High'].rolling(20).max()
-        df['Vol_SMA20'] = ta.sma(df['Volume'], length=20)
-
-        return df
-
-    except Exception as e:
+def analyze_stock(df, symbol):
+    df = calculate_indicators(df)
+    if df is None or df.empty:
+        return None
+    
+    last = df.iloc[-1]
+    score = 50
+    reasons = []
+    
+    # تحليل RSI
+    if 'RSI' in df.columns and not pd.isna(last['RSI']):
+        if last['RSI'] < 40:
+            score += 15
+            reasons.append(f"RSI إيجابي ومنطقة تجميع ({last['RSI']:.1f})")
+        elif last['RSI'] > 70:
+            score -= 10
+            reasons.append(f"RSI مرتفع جداً ({last['RSI']:.1f})")
+            
+    return {
+        'symbol': symbol,
+        'price': last['Close'],
+        'score': score,
+        'reasons': reasons
+    }
         return None
