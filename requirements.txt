@@ -1,8 +1,0 @@
-telebot
-pandas
-numpy
-pandas-ta
-requests
-flask
-sqlalchemy
-beautifulsoup4
