@@ -1,6 +1,9 @@
 import requests
 import pandas as pd
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from config import (
     EGX_STOCKS,
     SHARIA_EGX_STOCKS,
@@ -20,6 +23,15 @@ from strategy import evaluate_stock_strategy
 YAHOO_URL = (
     "https://query1.finance.yahoo.com/"
     "v8/finance/chart/"
+)
+
+
+# ==========================================================
+# Cairo Timezone
+# ==========================================================
+
+CAIRO_TZ = ZoneInfo(
+    "Africa/Cairo"
 )
 
 
@@ -76,6 +88,7 @@ def get_stock_data(symbol):
 
             return None
 
+
         results = chart.get(
             "result"
         )
@@ -88,7 +101,139 @@ def get_stock_data(symbol):
 
             return None
 
+
         result = results[0]
+
+
+        # ======================================================
+        # Yahoo Metadata
+        # ======================================================
+
+        meta = result.get(
+            "meta",
+            {}
+        )
+
+        regular_market_price = meta.get(
+            "regularMarketPrice"
+        )
+
+        regular_market_time = meta.get(
+            "regularMarketTime"
+        )
+
+
+        # ======================================================
+        # Validate Current Market Price
+        # ======================================================
+
+        if regular_market_price is None:
+
+            print(
+                f"⚠️ {symbol} → "
+                f"Yahoo did not provide regularMarketPrice"
+            )
+
+            return None
+
+
+        if regular_market_time is None:
+
+            print(
+                f"⚠️ {symbol} → "
+                f"Yahoo did not provide regularMarketTime"
+            )
+
+            return None
+
+
+        try:
+
+            regular_market_price = float(
+                regular_market_price
+            )
+
+            regular_market_time = int(
+                regular_market_time
+            )
+
+        except (
+            TypeError,
+            ValueError
+        ):
+
+            print(
+                f"⚠️ {symbol} → "
+                f"Invalid Yahoo market metadata"
+            )
+
+            return None
+
+
+        if regular_market_price <= 0:
+
+            print(
+                f"⚠️ {symbol} → "
+                f"Invalid current market price"
+            )
+
+            return None
+
+
+        # ======================================================
+        # Convert Yahoo Timestamp To Cairo Time
+        # ======================================================
+
+        market_datetime = datetime.fromtimestamp(
+            regular_market_time,
+            tz=CAIRO_TZ
+        )
+
+        market_date = (
+            market_datetime.date()
+        )
+
+        cairo_now = datetime.now(
+            CAIRO_TZ
+        )
+
+        cairo_today = (
+            cairo_now.date()
+        )
+
+
+        # ======================================================
+        # Freshness Check
+        # ======================================================
+
+        if market_date != cairo_today:
+
+            print(
+                f"⛔ {symbol} → "
+                f"STALE SESSION"
+            )
+
+            print(
+                f"   Yahoo market time: "
+                f"{market_datetime.strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+
+            print(
+                f"   Cairo current date: "
+                f"{cairo_today}"
+            )
+
+            print(
+                f"   Current Yahoo price: "
+                f"{regular_market_price:.2f}"
+            )
+
+            return None
+
+
+        # ======================================================
+        # Get Historical Data
+        # ======================================================
 
         timestamps = result.get(
             "timestamp"
@@ -103,6 +248,7 @@ def get_stock_data(symbol):
             "quote"
         )
 
+
         if not timestamps or not quotes:
 
             print(
@@ -111,26 +257,40 @@ def get_stock_data(symbol):
 
             return None
 
+
         quote = quotes[0]
+
 
         df = pd.DataFrame({
 
-            "Open": quote.get("open"),
+            "Open": quote.get(
+                "open"
+            ),
 
-            "High": quote.get("high"),
+            "High": quote.get(
+                "high"
+            ),
 
-            "Low": quote.get("low"),
+            "Low": quote.get(
+                "low"
+            ),
 
-            "Close": quote.get("close"),
+            "Close": quote.get(
+                "close"
+            ),
 
-            "Volume": quote.get("volume")
+            "Volume": quote.get(
+                "volume"
+            )
 
         })
+
 
         df.index = pd.to_datetime(
             timestamps,
             unit="s"
         )
+
 
         df.dropna(
             subset=[
@@ -143,15 +303,18 @@ def get_stock_data(symbol):
             inplace=True
         )
 
+
         df = df[
             ~df.index.duplicated(
                 keep="last"
             )
         ]
 
+
         df.sort_index(
             inplace=True
         )
+
 
         if len(df) < 220:
 
@@ -162,7 +325,68 @@ def get_stock_data(symbol):
 
             return None
 
+
+        # ======================================================
+        # Store Yahoo Current Market Data
+        # ======================================================
+
+        df.attrs[
+            "regular_market_price"
+        ] = regular_market_price
+
+        df.attrs[
+            "regular_market_time"
+        ] = regular_market_time
+
+        df.attrs[
+            "regular_market_datetime"
+        ] = market_datetime
+
+        df.attrs[
+            "price_status"
+        ] = "fresh_session"
+
+
+        # ======================================================
+        # Display Data Difference
+        # ======================================================
+
+        historical_close = float(
+            df["Close"].iloc[-1]
+        )
+
+
+        print(
+            f"💵 {symbol} → "
+            f"Yahoo Current Price: "
+            f"{regular_market_price:.2f}"
+        )
+
+        print(
+            f"📊 {symbol} → "
+            f"Latest Daily Close: "
+            f"{historical_close:.2f}"
+        )
+
+        if historical_close > 0:
+
+            difference_pct = (
+                (
+                    regular_market_price
+                    - historical_close
+                )
+                / historical_close
+            ) * 100
+
+            print(
+                f"📈 {symbol} → "
+                f"Current vs Daily Close: "
+                f"{difference_pct:+.2f}%"
+            )
+
+
         return df
+
 
     except requests.exceptions.Timeout:
 
@@ -172,6 +396,7 @@ def get_stock_data(symbol):
 
         return None
 
+
     except requests.exceptions.RequestException as e:
 
         print(
@@ -179,6 +404,7 @@ def get_stock_data(symbol):
         )
 
         return None
+
 
     except (
         KeyError,
@@ -192,6 +418,7 @@ def get_stock_data(symbol):
         )
 
         return None
+
 
     except Exception as e:
 
@@ -216,33 +443,42 @@ def passes_liquidity_filter(df):
         if len(df) < 20:
             return False
 
-        recent = df.tail(20).copy()
+
+        recent = df.tail(
+            20
+        ).copy()
+
 
         average_volume = (
             recent["Volume"]
             .mean()
         )
 
+
         average_daily_value = (
-            recent["Close"] *
-            recent["Volume"]
+            recent["Close"]
+            * recent["Volume"]
         ).mean()
 
+
         if (
-            average_volume <
-            MIN_AVG_VOLUME
+            average_volume
+            < MIN_AVG_VOLUME
         ):
 
             return False
 
+
         if (
-            average_daily_value <
-            MIN_AVG_DAILY_VALUE
+            average_daily_value
+            < MIN_AVG_DAILY_VALUE
         ):
 
             return False
+
 
         return True
+
 
     except (
         TypeError,
@@ -261,13 +497,16 @@ def scan_market():
 
     opportunities = []
 
+
     total_stocks = len(
         EGX_STOCKS
     )
 
+
     sharia_stocks = set(
         SHARIA_EGX_STOCKS
     )
+
 
     print(
         "\n===================================="
@@ -278,7 +517,8 @@ def scan_market():
     )
 
     print(
-        f"📊 EGX Universe: {total_stocks} stocks"
+        f"📊 EGX Universe: "
+        f"{total_stocks} stocks"
     )
 
     print(
@@ -328,10 +568,12 @@ def scan_market():
             symbol
         )
 
+
         if df is None or df.empty:
 
             print(
-                f"⚠️ Skipping {symbol}"
+                f"⚠️ {symbol} "
+                f"→ Skipped بسبب بيانات السعر"
             )
 
             continue
@@ -361,6 +603,7 @@ def scan_market():
             df
         )
 
+
         if df is None or df.empty:
 
             print(
@@ -372,6 +615,57 @@ def scan_market():
 
 
         # ======================================================
+        # IMPORTANT:
+        # Use Current Yahoo Market Price
+        #
+        # Technical indicators were calculated
+        # using historical daily candles.
+        #
+        # After indicators are calculated,
+        # replace ONLY the latest Close with
+        # the current market price.
+        #
+        # This prevents:
+        #
+        # Historical indicators
+        #        +
+        # Current market price
+        #
+        # from being mixed incorrectly.
+        # ======================================================
+
+        current_market_price = (
+            df.attrs.get(
+                "regular_market_price"
+            )
+        )
+
+
+        if (
+            current_market_price is None
+            or current_market_price <= 0
+        ):
+
+            print(
+                f"⚠️ {symbol} "
+                f"→ Invalid current market price"
+            )
+
+            continue
+
+
+        historical_close = float(
+            df["Close"].iloc[-1]
+        )
+
+
+        df.loc[
+            df.index[-1],
+            "Close"
+        ] = current_market_price
+
+
+        # ======================================================
         # Evaluate Complete Strategy
         # ======================================================
 
@@ -379,6 +673,7 @@ def scan_market():
             df,
             symbol
         )
+
 
         if analysis is None:
 
@@ -388,6 +683,44 @@ def scan_market():
             )
 
             continue
+
+
+        # ======================================================
+        # Add Price Validation Information
+        # ======================================================
+
+        analysis[
+            "price_source"
+        ] = "Yahoo Finance regularMarketPrice"
+
+        analysis[
+            "price_status"
+        ] = df.attrs.get(
+            "price_status",
+            "unknown"
+        )
+
+        analysis[
+            "market_datetime"
+        ] = df.attrs.get(
+            "regular_market_datetime"
+        ).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+        analysis[
+            "historical_close"
+        ] = round(
+            historical_close,
+            2
+        )
+
+        analysis[
+            "current_market_price"
+        ] = round(
+            current_market_price,
+            2
+        )
 
 
         # ======================================================
@@ -412,11 +745,14 @@ def scan_market():
                 analysis
             )
 
+
             print(
                 f"✅ Opportunity found: "
                 f"{symbol} "
-                f"Score={score}"
+                f"Score={score} "
+                f"Price={current_market_price:.2f}"
             )
+
 
         else:
 
