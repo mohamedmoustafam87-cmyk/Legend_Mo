@@ -49,28 +49,46 @@ def evaluate_stock_strategy(df, ticker_symbol):
         # ==========================================================
 
         close_price = float(latest["Close"])
+
         ma200 = float(latest["MA_200"])
+
         ema20 = float(latest["EMA_20"])
+
         ema50 = float(latest["EMA_50"])
 
         rsi = float(latest["RSI_14"])
 
         adx = float(latest["ADX"])
+
         prev_adx = float(prev["ADX"])
 
         macd = float(latest["MACD"])
-        macd_signal = float(latest["MACD_signal"])
+
+        macd_signal = float(
+            latest["MACD_signal"]
+        )
 
         prev_macd = float(prev["MACD"])
-        prev_signal = float(prev["MACD_signal"])
+
+        prev_signal = float(
+            prev["MACD_signal"]
+        )
 
         atr = float(latest["ATR"])
 
         volume = float(latest["Volume"])
-        vol_sma20 = float(latest["Vol_SMA20"])
 
-        resistance = float(latest["Resistance_20"])
-        support = float(latest["Support_20"])
+        vol_sma20 = float(
+            latest["Vol_SMA20"]
+        )
+
+        resistance = float(
+            latest["Resistance_20"]
+        )
+
+        support = float(
+            latest["Support_20"]
+        )
 
         # ==========================================================
         # Validation
@@ -86,58 +104,6 @@ def evaluate_stock_strategy(df, ticker_symbol):
             or support <= 0
         ):
             return None
-
-        # ==========================================================
-        # 1 Month Performance
-        # حوالي 21 جلسة تداول
-        # ==========================================================
-
-        if len(df) >= 22:
-
-            price_1m_ago = float(
-                df["Close"].iloc[-22]
-            )
-
-            if price_1m_ago > 0:
-
-                return_1m = (
-                    (close_price - price_1m_ago)
-                    / price_1m_ago
-                ) * 100
-
-            else:
-
-                return_1m = 0
-
-        else:
-
-            return_1m = 0
-
-        # ==========================================================
-        # 2 Month Performance
-        # حوالي 42 جلسة تداول
-        # ==========================================================
-
-        if len(df) >= 43:
-
-            price_2m_ago = float(
-                df["Close"].iloc[-43]
-            )
-
-            if price_2m_ago > 0:
-
-                return_2m = (
-                    (close_price - price_2m_ago)
-                    / price_2m_ago
-                ) * 100
-
-            else:
-
-                return_2m = 0
-
-        else:
-
-            return_2m = 0
 
         # ==========================================================
         # EMA50 Slope
@@ -190,60 +156,86 @@ def evaluate_stock_strategy(df, ticker_symbol):
             ma200_slope = 0
 
         # ==========================================================
-        # Trend Classification
+        # EMA20 Slope
         # ==========================================================
 
-        bullish_1m = return_1m > 0
-        bullish_2m = return_2m > 0
+        if len(df) >= 6:
 
-        strong_1m = return_1m >= 5
-        strong_2m = return_2m >= 8
+            ema20_5_days_ago = float(
+                df["EMA_20"].iloc[-6]
+            )
 
-        if (
-            strong_1m
-            and strong_2m
-            and ma200_slope > 0
-            and ema50_slope > 0
-        ):
+            if ema20_5_days_ago > 0:
 
-            trend_status = "🟢 اتجاه صاعد قوي للشهر والشهرين"
+                ema20_slope = (
+                    (ema20 - ema20_5_days_ago)
+                    / ema20_5_days_ago
+                ) * 100
 
-        elif (
-            bullish_1m
-            and bullish_2m
-            and ma200_slope > 0
-            and ema50_slope > 0
-        ):
+            else:
 
-            trend_status = "🟢 اتجاه صاعد مستمر للشهر والشهرين"
-
-        elif bullish_1m and bullish_2m:
-
-            trend_status = "🟡 اتجاه صاعد للشهر والشهرين"
-
-        elif bullish_1m:
-
-            trend_status = "🟡 صاعد على مدى شهر"
-
-        elif bullish_2m:
-
-            trend_status = "🟡 صاعد على مدى شهرين"
+                ema20_slope = 0
 
         else:
 
-            trend_status = "🔴 الاتجاه غير صاعد"
+            ema20_slope = 0
 
         # ==========================================================
-        # Score
-        # الحد الأقصى = 100
+        # MACD Conditions
+        # ==========================================================
+
+        bullish_macd_cross = (
+            prev_macd <= prev_signal
+            and macd > macd_signal
+        )
+
+        macd_positive = (
+            macd > macd_signal
+            and macd > 0
+        )
+
+        # ==========================================================
+        # Volume Ratio
+        # ==========================================================
+
+        volume_ratio = (
+            volume / vol_sma20
+            if vol_sma20 > 0
+            else 0
+        )
+
+        # ==========================================================
+        # Breakout
+        # ==========================================================
+
+        breakout = (
+            close_price > resistance
+        )
+
+        # ==========================================================
+        # Distance From EMA20
+        # ==========================================================
+
+        distance_from_ema = (
+            (close_price - ema20)
+            / ema20
+        ) * 100
+
+        # ==========================================================
+        # Candlestick Confirmation
+        # ==========================================================
+
+        candle_reasons = analyze_candlesticks(
+            df
+        )
+
+        # ==========================================================
+        # Overall Current Market Score
         # ==========================================================
 
         score = 0
-        reasons = []
 
-        # ==========================================================
-        # Long Term Trend - 15 Points
-        # ==========================================================
+        reasons = []
 
         if close_price > ma200:
 
@@ -258,12 +250,8 @@ def evaluate_stock_strategy(df, ticker_symbol):
             score += 5
 
             reasons.append(
-                f"📈 MA200 في اتجاه صاعد ({ma200_slope:+.1f}%)"
+                f"📈 MA200 صاعد ({ma200_slope:+.1f}%)"
             )
-
-        # ==========================================================
-        # Medium Term Trend - 15 Points
-        # ==========================================================
 
         if ema20 > ema50:
 
@@ -278,71 +266,18 @@ def evaluate_stock_strategy(df, ticker_symbol):
             score += 5
 
             reasons.append(
-                f"📈 EMA50 في اتجاه صاعد ({ema50_slope:+.1f}%)"
+                f"📈 EMA50 صاعد ({ema50_slope:+.1f}%)"
             )
 
-        # ==========================================================
-        # 1 Month Trend - 10 Points
-        # ==========================================================
-
-        if return_1m >= 5:
+        if (
+            adx > 25
+            and adx > prev_adx
+        ):
 
             score += 10
 
             reasons.append(
-                f"🚀 أداء الشهر قوي (+{return_1m:.1f}%)"
-            )
-
-        elif return_1m > 0:
-
-            score += 5
-
-            reasons.append(
-                f"🟢 أداء الشهر إيجابي (+{return_1m:.1f}%)"
-            )
-
-        else:
-
-            reasons.append(
-                f"🔴 أداء الشهر سلبي ({return_1m:.1f}%)"
-            )
-
-        # ==========================================================
-        # 2 Month Trend - 10 Points
-        # ==========================================================
-
-        if return_2m >= 8:
-
-            score += 10
-
-            reasons.append(
-                f"🚀 أداء الشهرين قوي (+{return_2m:.1f}%)"
-            )
-
-        elif return_2m > 0:
-
-            score += 5
-
-            reasons.append(
-                f"🟢 أداء الشهرين إيجابي (+{return_2m:.1f}%)"
-            )
-
-        else:
-
-            reasons.append(
-                f"🔴 أداء الشهرين سلبي ({return_2m:.1f}%)"
-            )
-
-        # ==========================================================
-        # ADX - 10 Points
-        # ==========================================================
-
-        if adx > 25 and adx > prev_adx:
-
-            score += 10
-
-            reasons.append(
-                f"💪 ترند قوي ومتزايد (ADX: {adx:.1f})"
+                f"💪 اتجاه قوي ومتزايد (ADX: {adx:.1f})"
             )
 
         elif adx > 20:
@@ -352,10 +287,6 @@ def evaluate_stock_strategy(df, ticker_symbol):
             reasons.append(
                 f"📊 قوة اتجاه مقبولة (ADX: {adx:.1f})"
             )
-
-        # ==========================================================
-        # RSI - 10 Points
-        # ==========================================================
 
         if 50 <= rsi <= 65:
 
@@ -385,20 +316,6 @@ def evaluate_stock_strategy(df, ticker_symbol):
                 f"⚠️ RSI منخفض ({rsi:.1f})"
             )
 
-        # ==========================================================
-        # MACD - 10 Points
-        # ==========================================================
-
-        bullish_macd_cross = (
-            prev_macd <= prev_signal
-            and macd > macd_signal
-        )
-
-        macd_positive = (
-            macd > macd_signal
-            and macd > 0
-        )
-
         if bullish_macd_cross:
 
             score += 10
@@ -414,16 +331,6 @@ def evaluate_stock_strategy(df, ticker_symbol):
             reasons.append(
                 "📈 MACD إيجابي"
             )
-
-        # ==========================================================
-        # Volume - 10 Points
-        # ==========================================================
-
-        volume_ratio = (
-            volume / vol_sma20
-            if vol_sma20 > 0
-            else 0
-        )
 
         if volume_ratio >= 1.5:
 
@@ -441,14 +348,6 @@ def evaluate_stock_strategy(df, ticker_symbol):
                 f"📊 حجم تداول جيد ({volume_ratio:.1f}x المتوسط)"
             )
 
-        # ==========================================================
-        # Breakout - 5 Points
-        # ==========================================================
-
-        breakout = (
-            close_price > resistance
-        )
-
         if breakout:
 
             score += 5
@@ -456,14 +355,6 @@ def evaluate_stock_strategy(df, ticker_symbol):
             reasons.append(
                 "🎯 السعر اخترق مقاومة الـ20 جلسة"
             )
-
-        # ==========================================================
-        # Candlestick Confirmation - 5 Points
-        # ==========================================================
-
-        candle_reasons = analyze_candlesticks(
-            df
-        )
 
         if candle_reasons:
 
@@ -476,39 +367,153 @@ def evaluate_stock_strategy(df, ticker_symbol):
                 candle_reasons
             )
 
-        # ==========================================================
-        # Final Score
-        # ==========================================================
-
         score = min(
             score,
             100
         )
 
         # ==========================================================
-        # Distance From EMA20
+        # 1 MONTH FORECAST SCORE
         # ==========================================================
 
-        distance_from_ema = (
-            (close_price - ema20)
-            / ema20
-        ) * 100
+        forecast_1m_score = 0
+
+        if ema20 > ema50:
+            forecast_1m_score += 15
+
+        if ema20_slope > 0:
+            forecast_1m_score += 10
+
+        if ema50_slope > 0:
+            forecast_1m_score += 10
+
+        if close_price > ma200:
+            forecast_1m_score += 10
+
+        if adx > 25 and adx > prev_adx:
+            forecast_1m_score += 15
+
+        elif adx > 20:
+            forecast_1m_score += 8
+
+        if 50 <= rsi <= 65:
+            forecast_1m_score += 10
+
+        elif 45 <= rsi < 50:
+            forecast_1m_score += 5
+
+        if bullish_macd_cross:
+            forecast_1m_score += 15
+
+        elif macd_positive:
+            forecast_1m_score += 8
+
+        if volume_ratio >= 1.5:
+            forecast_1m_score += 10
+
+        elif volume_ratio >= 1.0:
+            forecast_1m_score += 5
 
         # ==========================================================
-        # Entry Analysis
+        # 2 MONTH FORECAST SCORE
         # ==========================================================
 
+        forecast_2m_score = 0
+
+        if close_price > ma200:
+            forecast_2m_score += 15
+
+        if ma200_slope > 0:
+            forecast_2m_score += 15
+
+        if ema20 > ema50:
+            forecast_2m_score += 10
+
+        if ema50_slope > 0:
+            forecast_2m_score += 15
+
+        if adx > 25 and adx > prev_adx:
+            forecast_2m_score += 15
+
+        elif adx > 20:
+            forecast_2m_score += 8
+
+        if 50 <= rsi <= 65:
+            forecast_2m_score += 10
+
+        elif 45 <= rsi < 50:
+            forecast_2m_score += 5
+
+        if macd_positive:
+            forecast_2m_score += 10
+
+        elif bullish_macd_cross:
+            forecast_2m_score += 8
+
+        if volume_ratio >= 1.5:
+            forecast_2m_score += 10
+
+        elif volume_ratio >= 1.0:
+            forecast_2m_score += 5
+
+        forecast_1m_score = min(
+            forecast_1m_score,
+            100
+        )
+
+        forecast_2m_score = min(
+            forecast_2m_score,
+            100
+        )
+
+        if forecast_1m_score >= 85:
+            forecast_1m_status = "🔥 ترشيح قوي للشهر القادم"
+        elif forecast_1m_score >= 75:
+            forecast_1m_status = "🟢 ترشيح جيد للشهر القادم"
+        elif forecast_1m_score >= 65:
+            forecast_1m_status = "🟡 مراقبة للشهر القادم"
+        else:
+            forecast_1m_status = "🔴 ترشيح ضعيف للشهر القادم"
+
+        if forecast_2m_score >= 85:
+            forecast_2m_status = "🔥 ترشيح قوي للشهرين القادمين"
+        elif forecast_2m_score >= 75:
+            forecast_2m_status = "🟢 ترشيح جيد للشهرين القادمين"
+        elif forecast_2m_score >= 65:
+            forecast_2m_status = "🟡 مراقبة للشهرين القادمين"
+        else:
+            forecast_2m_status = "🔴 ترشيح ضعيف للشهرين القادمين"
+
+        if (
+            forecast_1m_score >= 75
+            and forecast_2m_score >= 75
+        ):
+            trend_status = "🟢 اتجاه حالي داعم للشهر والشهرين القادمين"
+        elif forecast_1m_score >= 75:
+            trend_status = "🟢 Setup أقوى للشهر القادم"
+        elif forecast_2m_score >= 75:
+            trend_status = "🟢 Setup أقوى للشهرين القادمين"
+        elif (
+            forecast_1m_score >= 65
+            and forecast_2m_score >= 65
+        ):
+            trend_status = "🟡 Setup متوسط ويحتاج متابعة"
+        else:
+            trend_status = "🔴 Setup المستقبلي ضعيف"
+
+        # ==========================================================
+        # Entry Analysis (Adjusted for Momentum Stocks)
+        # ==========================================================
+
+        # السماح للأسهم الصاروخية بتجاوز النسبة التقليدية طالما التوقعات المستقبلية قوية
         overextended = (
-            distance_from_ema > 5
+            distance_from_ema > 25
+            and forecast_1m_score < 75
         )
 
         too_far_below_ema = (
             distance_from_ema < -8
         )
-
-        # ==========================================================
-        # Ideal Entry Zone
-        # ==========================================================
 
         entry_candidates = [
             ema20,
@@ -517,61 +522,31 @@ def evaluate_stock_strategy(df, ticker_symbol):
         ]
 
         entry_candidates = [
-            x for x in entry_candidates
+            x
+            for x in entry_candidates
             if x > 0
         ]
 
         if entry_candidates:
-
-            ideal_entry = min(
-                entry_candidates
-            )
-
-            entry_high = max(
-                entry_candidates
-            )
-
+            ideal_entry = min(entry_candidates)
+            entry_high = max(entry_candidates)
         else:
-
             ideal_entry = close_price
             entry_high = close_price
 
-        # ==========================================================
-        # Entry Status
-        # ==========================================================
-
         if overextended:
-
-            entry_status = (
-                "🟡 WAIT - السعر ممتد فوق EMA20"
-            )
-
+            entry_status = "🟡 WAIT - السعر ممتد فوق EMA20"
         elif too_far_below_ema:
-
-            entry_status = (
-                "🟡 WAIT - السعر أسفل مناطق الدعم"
-            )
-
-        elif breakout:
-
-            entry_status = (
-                "🟢 BUY - Breakout"
-            )
-
+            entry_status = "🟡 WAIT - السعر أسفل مناطق الدعم"
+        elif breakout or forecast_1m_score >= 75:
+            entry_status = "🟢 BUY - Strong Momentum / Breakout"
         elif (
             close_price >= ideal_entry
             and close_price <= entry_high * 1.02
         ):
-
-            entry_status = (
-                "🟢 BUY ZONE"
-            )
-
+            entry_status = "🟢 BUY ZONE"
         else:
-
-            entry_status = (
-                "🟡 WATCH - انتظار نقطة دخول أفضل"
-            )
+            entry_status = "🟡 WATCH - انتظار نقطة دخول أفضل"
 
         # ==========================================================
         # Risk Management
@@ -584,7 +559,6 @@ def evaluate_stock_strategy(df, ticker_symbol):
         )
 
         if risk is None:
-
             return None
 
         stop_loss = float(
@@ -592,7 +566,6 @@ def evaluate_stock_strategy(df, ticker_symbol):
         )
 
         if stop_loss >= close_price:
-
             return None
 
         # ==========================================================
@@ -600,183 +573,72 @@ def evaluate_stock_strategy(df, ticker_symbol):
         # ==========================================================
 
         if score < MIN_SCORE_THRESHOLD:
-
-            recommendation = (
-                "🔴 لا توجد إشارة شراء كافية"
-            )
-
+            recommendation = "🔴 لا توجد إشارة شراء كافية"
         elif (
             score >= 90
-            and trend_status.startswith("🟢")
+            and forecast_1m_score >= 75
+            and forecast_2m_score >= 75
             and entry_status.startswith("🟢")
         ):
-
-            recommendation = (
-                "🔥 شراء قوي جداً"
-            )
-
+            recommendation = "🔥 شراء قوي جداً"
         elif (
             score >= 85
-            and trend_status.startswith("🟢")
+            and (
+                forecast_1m_score >= 75
+                or forecast_2m_score >= 75
+            )
             and entry_status.startswith("🟢")
         ):
-
-            recommendation = (
-                "🟢 فرصة شراء قوية"
-            )
-
+            recommendation = "🟢 فرصة شراء قوية"
         elif (
-            trend_status.startswith("🟢")
+            forecast_1m_score >= 75
+            and forecast_2m_score >= 75
             and entry_status.startswith("🟢")
         ):
-
-            recommendation = (
-                "🟡 فرصة شراء جيدة"
-            )
-
-        elif trend_status.startswith("🟢"):
-
-            recommendation = (
-                "🟡 WATCH - الاتجاه جيد وانتظر دخول أفضل"
-            )
-
+            recommendation = "🟡 فرصة شراء جيدة"
+        elif (
+            forecast_1m_score >= 75
+            or forecast_2m_score >= 75
+        ):
+            recommendation = "🟡 WATCH - التوقع إيجابي وانتظر دخول أفضل"
         else:
-
-            recommendation = (
-                "🟡 WATCH"
-            )
+            recommendation = "🟡 WATCH"
 
         # ==========================================================
         # Return Result
         # ==========================================================
 
         return {
-
-            "ticker":
-                ticker_symbol.replace(
-                    ".CA",
-                    ""
-                ),
-
-            "price":
-                round(
-                    close_price,
-                    2
-                ),
-
-            "score":
-                score,
-
-            "rec":
-                recommendation,
-
-            "trend_status":
-                trend_status,
-
-            "entry_status":
-                entry_status,
-
-            "return_1m":
-                round(
-                    return_1m,
-                    2
-                ),
-
-            "return_2m":
-                round(
-                    return_2m,
-                    2
-                ),
-
-            "ma200_slope":
-                round(
-                    ma200_slope,
-                    2
-                ),
-
-            "ema50_slope":
-                round(
-                    ema50_slope,
-                    2
-                ),
-
-            "distance_from_ema":
-                round(
-                    distance_from_ema,
-                    2
-                ),
-
-            "ideal_entry":
-                round(
-                    ideal_entry,
-                    2
-                ),
-
-            "entry_high":
-                round(
-                    entry_high,
-                    2
-                ),
-
-            "atr":
-                round(
-                    atr,
-                    2
-                ),
-
-            "stop_loss":
-                risk["stop_loss"],
-
-            "stop_loss_pct":
-                risk.get(
-                    "stop_loss_pct",
-                    0
-                ),
-
-            "shares":
-                risk["shares"],
-
-            "position_value":
-                risk["position_value"],
-
-            "actual_risk":
-                risk["actual_risk"],
-
-            "risk_per_share":
-                risk["risk_per_share"],
-
-            "tp1":
-                risk["tp1"],
-
-            "tp2":
-                risk["tp2"],
-
-            "rr1":
-                risk["rr1"],
-
-            "rr2":
-                risk["rr2"],
-
-            "support":
-                round(
-                    support,
-                    2
-                ),
-
-            "resistance":
-                round(
-                    resistance,
-                    2
-                ),
-
-            "volume_ratio":
-                round(
-                    volume_ratio,
-                    2
-                ),
-
-            "reasons":
-                reasons
+            "ticker": ticker_symbol.replace(".CA", ""),
+            "price": round(close_price, 2),
+            "score": score,
+            "rec": recommendation,
+            "trend_status": trend_status,
+            "forecast_1m_score": forecast_1m_score,
+            "forecast_2m_score": forecast_2m_score,
+            "forecast_1m_status": forecast_1m_status,
+            "forecast_2m_status": forecast_2m_status,
+            "entry_status": entry_status,
+            "distance_from_ema": round(distance_from_ema, 2),
+            "ideal_entry": round(ideal_entry, 2),
+            "entry_high": round(entry_high, 2),
+            "ma200_slope": round(ma200_slope, 2),
+            "ema50_slope": round(ema50_slope, 2),
+            "atr": round(atr, 2),
+            "support": round(support, 2),
+            "resistance": round(resistance, 2),
+            "volume_ratio": round(volume_ratio, 2),
+            "stop_loss": risk["stop_loss"],
+            "stop_loss_pct": risk.get("stop_loss_pct", 0),
+            "shares": risk["shares"],
+            "position_value": risk["position_value"],
+            "actual_risk": risk["actual_risk"],
+            "risk_per_share": risk["risk_per_share"],
+            "tp1": risk["tp1"],
+            "tp2": risk["tp2"],
+            "rr1": risk["rr1"],
+            "rr2": risk["rr2"],
+            "reasons": reasons
         }
 
     except (
@@ -786,5 +648,4 @@ def evaluate_stock_strategy(df, ticker_symbol):
         IndexError,
         ZeroDivisionError
     ):
-
         return None
