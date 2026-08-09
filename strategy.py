@@ -45,38 +45,116 @@ def evaluate_stock_strategy(df, ticker_symbol):
                 return None
 
         # ==========================================================
-        # Current Values
+        # Current Market Price
+        #
+        # IMPORTANT:
+        # السعر الحالي يتم أخذه من Yahoo regularMarketPrice
+        # وليس من آخر Daily Close.
         # ==========================================================
 
-        close_price = float(latest["Close"])
+        current_market_price = df.attrs.get(
+            "regular_market_price"
+        )
 
-        ma200 = float(latest["MA_200"])
+        if (
+            current_market_price is None
+            or current_market_price <= 0
+        ):
+            return None
 
-        ema20 = float(latest["EMA_20"])
+        close_price = float(
+            current_market_price
+        )
 
-        ema50 = float(latest["EMA_50"])
+        # ==========================================================
+        # Historical Daily Close
+        #
+        # يستخدم فقط للمقارنة والعرض.
+        # المؤشرات نفسها تم حسابها قبل إدخال السعر الحالي.
+        # ==========================================================
 
-        rsi = float(latest["RSI_14"])
+        historical_close = float(
+            latest["Close"]
+        )
 
-        adx = float(latest["ADX"])
+        # ==========================================================
+        # Price Validation Metadata
+        # ==========================================================
 
-        prev_adx = float(prev["ADX"])
+        price_status = df.attrs.get(
+            "price_status",
+            "unknown"
+        )
 
-        macd = float(latest["MACD"])
+        regular_market_datetime = df.attrs.get(
+            "regular_market_datetime"
+        )
+
+        if regular_market_datetime is not None:
+
+            market_datetime_string = (
+                regular_market_datetime.strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+            )
+
+        else:
+
+            market_datetime_string = (
+                "غير متوفر"
+            )
+
+        # ==========================================================
+        # Historical Indicators
+        # ==========================================================
+
+        ma200 = float(
+            latest["MA_200"]
+        )
+
+        ema20 = float(
+            latest["EMA_20"]
+        )
+
+        ema50 = float(
+            latest["EMA_50"]
+        )
+
+        rsi = float(
+            latest["RSI_14"]
+        )
+
+        adx = float(
+            latest["ADX"]
+        )
+
+        prev_adx = float(
+            prev["ADX"]
+        )
+
+        macd = float(
+            latest["MACD"]
+        )
 
         macd_signal = float(
             latest["MACD_signal"]
         )
 
-        prev_macd = float(prev["MACD"])
+        prev_macd = float(
+            prev["MACD"]
+        )
 
         prev_signal = float(
             prev["MACD_signal"]
         )
 
-        atr = float(latest["ATR"])
+        atr = float(
+            latest["ATR"]
+        )
 
-        volume = float(latest["Volume"])
+        volume = float(
+            latest["Volume"]
+        )
 
         vol_sma20 = float(
             latest["Vol_SMA20"]
@@ -206,6 +284,9 @@ def evaluate_stock_strategy(df, ticker_symbol):
 
         # ==========================================================
         # Breakout
+        #
+        # المقاومة تاريخية.
+        # السعر المستخدم هنا هو السعر الحالي.
         # ==========================================================
 
         breakout = (
@@ -214,6 +295,8 @@ def evaluate_stock_strategy(df, ticker_symbol):
 
         # ==========================================================
         # Distance From EMA20
+        #
+        # السعر الحالي مقابل EMA20 التاريخي.
         # ==========================================================
 
         distance_from_ema = (
@@ -223,6 +306,9 @@ def evaluate_stock_strategy(df, ticker_symbol):
 
         # ==========================================================
         # Candlestick Confirmation
+        #
+        # الشموع تظل مبنية على آخر Daily Candle
+        # وليس السعر الحالي اللحظي.
         # ==========================================================
 
         candle_reasons = analyze_candlesticks(
@@ -237,13 +323,21 @@ def evaluate_stock_strategy(df, ticker_symbol):
 
         reasons = []
 
+        # ----------------------------------------------------------
+        # Price vs MA200
+        # ----------------------------------------------------------
+
         if close_price > ma200:
 
             score += 10
 
             reasons.append(
-                "✅ السعر أعلى من متوسط 200 يوم"
+                "✅ السعر الحالي أعلى من متوسط 200 يوم"
             )
+
+        # ----------------------------------------------------------
+        # MA200 Slope
+        # ----------------------------------------------------------
 
         if ma200_slope > 0:
 
@@ -253,6 +347,10 @@ def evaluate_stock_strategy(df, ticker_symbol):
                 f"📈 MA200 صاعد ({ma200_slope:+.1f}%)"
             )
 
+        # ----------------------------------------------------------
+        # EMA20 vs EMA50
+        # ----------------------------------------------------------
+
         if ema20 > ema50:
 
             score += 10
@@ -261,6 +359,10 @@ def evaluate_stock_strategy(df, ticker_symbol):
                 "📈 EMA20 أعلى من EMA50"
             )
 
+        # ----------------------------------------------------------
+        # EMA50 Slope
+        # ----------------------------------------------------------
+
         if ema50_slope > 0:
 
             score += 5
@@ -268,6 +370,10 @@ def evaluate_stock_strategy(df, ticker_symbol):
             reasons.append(
                 f"📈 EMA50 صاعد ({ema50_slope:+.1f}%)"
             )
+
+        # ----------------------------------------------------------
+        # ADX
+        # ----------------------------------------------------------
 
         if (
             adx > 25
@@ -287,6 +393,10 @@ def evaluate_stock_strategy(df, ticker_symbol):
             reasons.append(
                 f"📊 قوة اتجاه مقبولة (ADX: {adx:.1f})"
             )
+
+        # ----------------------------------------------------------
+        # RSI
+        # ----------------------------------------------------------
 
         if 50 <= rsi <= 65:
 
@@ -316,6 +426,10 @@ def evaluate_stock_strategy(df, ticker_symbol):
                 f"⚠️ RSI منخفض ({rsi:.1f})"
             )
 
+        # ----------------------------------------------------------
+        # MACD
+        # ----------------------------------------------------------
+
         if bullish_macd_cross:
 
             score += 10
@@ -331,6 +445,10 @@ def evaluate_stock_strategy(df, ticker_symbol):
             reasons.append(
                 "📈 MACD إيجابي"
             )
+
+        # ----------------------------------------------------------
+        # Volume
+        # ----------------------------------------------------------
 
         if volume_ratio >= 1.5:
 
@@ -348,13 +466,21 @@ def evaluate_stock_strategy(df, ticker_symbol):
                 f"📊 حجم تداول جيد ({volume_ratio:.1f}x المتوسط)"
             )
 
+        # ----------------------------------------------------------
+        # Breakout
+        # ----------------------------------------------------------
+
         if breakout:
 
             score += 5
 
             reasons.append(
-                "🎯 السعر اخترق مقاومة الـ20 جلسة"
+                "🎯 السعر الحالي اخترق مقاومة الـ20 جلسة"
             )
+
+        # ----------------------------------------------------------
+        # Candlestick
+        # ----------------------------------------------------------
 
         if candle_reasons:
 
@@ -391,28 +517,41 @@ def evaluate_stock_strategy(df, ticker_symbol):
             forecast_1m_score += 10
 
         if adx > 25 and adx > prev_adx:
+
             forecast_1m_score += 15
 
         elif adx > 20:
+
             forecast_1m_score += 8
 
         if 50 <= rsi <= 65:
+
             forecast_1m_score += 10
 
         elif 45 <= rsi < 50:
+
             forecast_1m_score += 5
 
         if bullish_macd_cross:
+
             forecast_1m_score += 15
 
         elif macd_positive:
+
             forecast_1m_score += 8
 
         if volume_ratio >= 1.5:
+
             forecast_1m_score += 10
 
         elif volume_ratio >= 1.0:
+
             forecast_1m_score += 5
+
+        forecast_1m_score = min(
+            forecast_1m_score,
+            100
+        )
 
         # ==========================================================
         # 2 MONTH FORECAST SCORE
@@ -421,83 +560,144 @@ def evaluate_stock_strategy(df, ticker_symbol):
         forecast_2m_score = 0
 
         if close_price > ma200:
+
             forecast_2m_score += 15
 
         if ma200_slope > 0:
+
             forecast_2m_score += 15
 
         if ema20 > ema50:
+
             forecast_2m_score += 10
 
         if ema50_slope > 0:
+
             forecast_2m_score += 15
 
         if adx > 25 and adx > prev_adx:
+
             forecast_2m_score += 15
 
         elif adx > 20:
+
             forecast_2m_score += 8
 
         if 50 <= rsi <= 65:
+
             forecast_2m_score += 10
 
         elif 45 <= rsi < 50:
+
             forecast_2m_score += 5
 
         if macd_positive:
+
             forecast_2m_score += 10
 
         elif bullish_macd_cross:
+
             forecast_2m_score += 8
 
         if volume_ratio >= 1.5:
+
             forecast_2m_score += 10
 
         elif volume_ratio >= 1.0:
-            forecast_2m_score += 5
 
-        forecast_1m_score = min(
-            forecast_1m_score,
-            100
-        )
+            forecast_2m_score += 5
 
         forecast_2m_score = min(
             forecast_2m_score,
             100
         )
 
+        # ==========================================================
+        # Forecast Status
+        # ==========================================================
+
         if forecast_1m_score >= 85:
-            forecast_1m_status = "🔥 ترشيح قوي للشهر القادم"
+
+            forecast_1m_status = (
+                "🔥 ترشيح قوي للشهر القادم"
+            )
+
         elif forecast_1m_score >= 70:
-            forecast_1m_status = "🟢 ترشيح جيد للشهر القادم"
+
+            forecast_1m_status = (
+                "🟢 ترشيح جيد للشهر القادم"
+            )
+
         elif forecast_1m_score >= 55:
-            forecast_1m_status = "🟡 مراقبة للشهر القادم"
+
+            forecast_1m_status = (
+                "🟡 مراقبة للشهر القادم"
+            )
+
         else:
-            forecast_1m_status = "🔴 ترشيح ضعيف للشهر القادم"
+
+            forecast_1m_status = (
+                "🔴 ترشيح ضعيف للشهر القادم"
+            )
 
         if forecast_2m_score >= 85:
-            forecast_2m_status = "🔥 ترشيح قوي للشهرين القادمين"
+
+            forecast_2m_status = (
+                "🔥 ترشيح قوي للشهرين القادمين"
+            )
+
         elif forecast_2m_score >= 70:
-            forecast_2m_status = "🟢 ترشيح جيد للشهرين القادمين"
+
+            forecast_2m_status = (
+                "🟢 ترشيح جيد للشهرين القادمين"
+            )
+
         elif forecast_2m_score >= 55:
-            forecast_2m_status = "🟡 مراقبة للشهرين القادمين"
+
+            forecast_2m_status = (
+                "🟡 مراقبة للشهرين القادمين"
+            )
+
         else:
-            forecast_2m_status = "🔴 ترشيح ضعيف للشهرين القادمين"
+
+            forecast_2m_status = (
+                "🔴 ترشيح ضعيف للشهرين القادمين"
+            )
+
+        # ==========================================================
+        # General Trend Status
+        # ==========================================================
 
         if (
             forecast_1m_score >= 65
             and forecast_2m_score >= 65
         ):
-            trend_status = "🟢 اتجاه حالي داعم للشهر والشهرين القادمين"
+
+            trend_status = (
+                "🟢 اتجاه حالي داعم "
+                "للشهر والشهرين القادمين"
+            )
+
         elif forecast_1m_score >= 65:
-            trend_status = "🟢 Setup أقوى للشهر القادم"
+
+            trend_status = (
+                "🟢 Setup أقوى للشهر القادم"
+            )
+
         elif forecast_2m_score >= 65:
-            trend_status = "🟢 Setup أقوى للشهرين القادمين"
+
+            trend_status = (
+                "🟢 Setup أقوى للشهرين القادمين"
+            )
+
         else:
-            trend_status = "🟡 Setup متوسط ويحتاج متابعة"
+
+            trend_status = (
+                "🟡 Setup متوسط ويحتاج متابعة"
+            )
 
         # ==========================================================
-        # Entry Analysis (Flexible for Momentum Stocks)
+        # Entry Analysis
         # ==========================================================
 
         overextended = (
@@ -522,23 +722,54 @@ def evaluate_stock_strategy(df, ticker_symbol):
         ]
 
         if entry_candidates:
-            ideal_entry = min(entry_candidates)
-            entry_high = max(entry_candidates)
+
+            ideal_entry = min(
+                entry_candidates
+            )
+
+            entry_high = max(
+                entry_candidates
+            )
+
         else:
+
             ideal_entry = close_price
             entry_high = close_price
 
+        # ==========================================================
+        # Entry Status
+        # ==========================================================
+
         if overextended:
-            entry_status = "🟡 WAIT - السعر ممتد فوق EMA20"
+
+            entry_status = (
+                "🟡 WAIT - السعر ممتد فوق EMA20"
+            )
+
         elif too_far_below_ema:
-            entry_status = "🟡 WAIT - السعر أسفل مناطق الدعم"
+
+            entry_status = (
+                "🟡 WAIT - السعر أسفل مناطق الدعم"
+            )
+
         elif breakout or forecast_1m_score >= 60:
-            entry_status = "🟢 BUY - Strong Momentum / Breakout"
+
+            entry_status = (
+                "🟢 BUY - Strong Momentum / Breakout"
+            )
+
         else:
-            entry_status = "🟢 BUY ZONE / WATCH"
+
+            entry_status = (
+                "🟢 BUY ZONE / WATCH"
+            )
 
         # ==========================================================
         # Risk Management
+        #
+        # IMPORTANT:
+        # يستخدم السعر الحالي من Yahoo
+        # وليس آخر Daily Close.
         # ==========================================================
 
         risk = calculate_risk_management(
@@ -558,55 +789,224 @@ def evaluate_stock_strategy(df, ticker_symbol):
             return None
 
         # ==========================================================
-        # Final Recommendation (Flexible to Always Show Opportunities)
+        # Final Recommendation
         # ==========================================================
 
         if score < MIN_SCORE_THRESHOLD:
-            return None  # استبعاد ما دون الحد الأدنى الجديد (60) لضمان ظهور الباقي فقط
-        elif score >= 80 and forecast_1m_score >= 70:
-            recommendation = "🔥 شراء قوي جداً"
+
+            return None
+
+        elif (
+            score >= 80
+            and forecast_1m_score >= 70
+        ):
+
+            recommendation = (
+                "🔥 شراء قوي جداً"
+            )
+
         elif score >= 70:
-            recommendation = "🟢 فرصة شراء قوية"
+
+            recommendation = (
+                "🟢 فرصة شراء قوية"
+            )
+
         elif score >= 60:
-            recommendation = "🟡 فرصة شراء جيدة"
+
+            recommendation = (
+                "🟡 فرصة شراء جيدة"
+            )
+
         else:
-            recommendation = "🟡 WATCH"
+
+            recommendation = (
+                "🟡 WATCH"
+            )
 
         # ==========================================================
         # Return Result
         # ==========================================================
 
         return {
-            "ticker": ticker_symbol.replace(".CA", ""),
-            "price": round(close_price, 2),
-            "score": score,
-            "rec": recommendation,
-            "trend_status": trend_status,
-            "forecast_1m_score": forecast_1m_score,
-            "forecast_2m_score": forecast_2m_score,
-            "forecast_1m_status": forecast_1m_status,
-            "forecast_2m_status": forecast_2m_status,
-            "entry_status": entry_status,
-            "distance_from_ema": round(distance_from_ema, 2),
-            "ideal_entry": round(ideal_entry, 2),
-            "entry_high": round(entry_high, 2),
-            "ma200_slope": round(ma200_slope, 2),
-            "ema50_slope": round(ema50_slope, 2),
-            "atr": round(atr, 2),
-            "support": round(support, 2),
-            "resistance": round(resistance, 2),
-            "volume_ratio": round(volume_ratio, 2),
-            "stop_loss": risk["stop_loss"],
-            "stop_loss_pct": risk.get("stop_loss_pct", 0),
-            "shares": risk["shares"],
-            "position_value": risk["position_value"],
-            "actual_risk": risk["actual_risk"],
-            "risk_per_share": risk["risk_per_share"],
-            "tp1": risk["tp1"],
-            "tp2": risk["tp2"],
-            "rr1": risk["rr1"],
-            "rr2": risk["rr2"],
-            "reasons": reasons
+
+            # ------------------------------------------------------
+            # Identity
+            # ------------------------------------------------------
+
+            "ticker":
+                ticker_symbol.replace(
+                    ".CA",
+                    ""
+                ),
+
+            # ------------------------------------------------------
+            # Price Information
+            # ------------------------------------------------------
+
+            "price":
+                round(
+                    close_price,
+                    2
+                ),
+
+            "current_market_price":
+                round(
+                    close_price,
+                    2
+                ),
+
+            "historical_close":
+                round(
+                    historical_close,
+                    2
+                ),
+
+            "price_status":
+                price_status,
+
+            "price_source":
+                "Yahoo Finance regularMarketPrice",
+
+            "market_datetime":
+                market_datetime_string,
+
+            # ------------------------------------------------------
+            # Current Score
+            # ------------------------------------------------------
+
+            "score":
+                score,
+
+            "rec":
+                recommendation,
+
+            # ------------------------------------------------------
+            # Trend / Forecast
+            # ------------------------------------------------------
+
+            "trend_status":
+                trend_status,
+
+            "forecast_1m_score":
+                forecast_1m_score,
+
+            "forecast_2m_score":
+                forecast_2m_score,
+
+            "forecast_1m_status":
+                forecast_1m_status,
+
+            "forecast_2m_status":
+                forecast_2m_status,
+
+            # ------------------------------------------------------
+            # Entry
+            # ------------------------------------------------------
+
+            "entry_status":
+                entry_status,
+
+            "distance_from_ema":
+                round(
+                    distance_from_ema,
+                    2
+                ),
+
+            "ideal_entry":
+                round(
+                    ideal_entry,
+                    2
+                ),
+
+            "entry_high":
+                round(
+                    entry_high,
+                    2
+                ),
+
+            # ------------------------------------------------------
+            # Indicators
+            # ------------------------------------------------------
+
+            "ma200_slope":
+                round(
+                    ma200_slope,
+                    2
+                ),
+
+            "ema50_slope":
+                round(
+                    ema50_slope,
+                    2
+                ),
+
+            "atr":
+                round(
+                    atr,
+                    2
+                ),
+
+            "support":
+                round(
+                    support,
+                    2
+                ),
+
+            "resistance":
+                round(
+                    resistance,
+                    2
+                ),
+
+            "volume_ratio":
+                round(
+                    volume_ratio,
+                    2
+                ),
+
+            # ------------------------------------------------------
+            # Risk Management
+            # ------------------------------------------------------
+
+            "stop_loss":
+                risk["stop_loss"],
+
+            "stop_loss_pct":
+                risk.get(
+                    "stop_loss_pct",
+                    0
+                ),
+
+            "shares":
+                risk["shares"],
+
+            "position_value":
+                risk["position_value"],
+
+            "actual_risk":
+                risk["actual_risk"],
+
+            "risk_per_share":
+                risk["risk_per_share"],
+
+            "tp1":
+                risk["tp1"],
+
+            "tp2":
+                risk["tp2"],
+
+            "rr1":
+                risk["rr1"],
+
+            "rr2":
+                risk["rr2"],
+
+            # ------------------------------------------------------
+            # Reasons
+            # ------------------------------------------------------
+
+            "reasons":
+                reasons
         }
 
     except (
@@ -616,4 +1016,5 @@ def evaluate_stock_strategy(df, ticker_symbol):
         IndexError,
         ZeroDivisionError
     ):
+
         return None
