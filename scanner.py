@@ -232,7 +232,7 @@ def get_stock_data(symbol):
 
 
         # ======================================================
-        # Get Historical Data
+        # Get Historical Daily Data
         # ======================================================
 
         timestamps = result.get(
@@ -327,7 +327,23 @@ def get_stock_data(symbol):
 
 
         # ======================================================
+        # Historical Close
+        # ======================================================
+
+        historical_close = float(
+            df["Close"].iloc[-1]
+        )
+
+
+        # ======================================================
         # Store Yahoo Current Market Data
+        #
+        # IMPORTANT:
+        # لا نعدل df["Close"]
+        #
+        # Close يظل آخر Daily Close تاريخي.
+        #
+        # السعر الحالي يتم تخزينه منفصلاً داخل attrs.
         # ======================================================
 
         df.attrs[
@@ -344,17 +360,12 @@ def get_stock_data(symbol):
 
         df.attrs[
             "price_status"
-        ] = "fresh_session"
+        ] = "fresh"
 
 
         # ======================================================
         # Display Data Difference
         # ======================================================
-
-        historical_close = float(
-            df["Close"].iloc[-1]
-        )
-
 
         print(
             f"💵 {symbol} → "
@@ -367,6 +378,7 @@ def get_stock_data(symbol):
             f"Latest Daily Close: "
             f"{historical_close:.2f}"
         )
+
 
         if historical_close > 0:
 
@@ -383,6 +395,13 @@ def get_stock_data(symbol):
                 f"Current vs Daily Close: "
                 f"{difference_pct:+.2f}%"
             )
+
+
+        print(
+            f"🕐 {symbol} → "
+            f"Market Time: "
+            f"{market_datetime.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
 
 
         return df
@@ -438,9 +457,12 @@ def passes_liquidity_filter(df):
     try:
 
         if df is None or df.empty:
+
             return False
 
+
         if len(df) < 20:
+
             return False
 
 
@@ -597,6 +619,9 @@ def scan_market():
 
         # ======================================================
         # Calculate Technical Indicators
+        #
+        # IMPORTANT:
+        # كل المؤشرات يتم حسابها من Daily Historical Data.
         # ======================================================
 
         df = calculate_indicators(
@@ -615,23 +640,10 @@ def scan_market():
 
 
         # ======================================================
-        # IMPORTANT:
-        # Use Current Yahoo Market Price
+        # Validate Current Yahoo Market Price
         #
-        # Technical indicators were calculated
-        # using historical daily candles.
-        #
-        # After indicators are calculated,
-        # replace ONLY the latest Close with
-        # the current market price.
-        #
-        # This prevents:
-        #
-        # Historical indicators
-        #        +
-        # Current market price
-        #
-        # from being mixed incorrectly.
+        # لا نغير Close.
+        # strategy.py سيقرأ السعر الحالي من attrs.
         # ======================================================
 
         current_market_price = (
@@ -654,19 +666,33 @@ def scan_market():
             continue
 
 
-        historical_close = float(
-            df["Close"].iloc[-1]
+        regular_market_datetime = (
+            df.attrs.get(
+                "regular_market_datetime"
+            )
         )
 
 
-        df.loc[
-            df.index[-1],
-            "Close"
-        ] = current_market_price
+        if regular_market_datetime is None:
+
+            print(
+                f"⚠️ {symbol} "
+                f"→ Missing market timestamp"
+            )
+
+            continue
 
 
         # ======================================================
         # Evaluate Complete Strategy
+        #
+        # Strategy uses:
+        #
+        # Historical Daily Data
+        # +
+        # Current Yahoo Market Price
+        #
+        # without modifying historical Close.
         # ======================================================
 
         analysis = evaluate_stock_strategy(
@@ -691,7 +717,10 @@ def scan_market():
 
         analysis[
             "price_source"
-        ] = "Yahoo Finance regularMarketPrice"
+        ] = (
+            "Yahoo Finance regularMarketPrice"
+        )
+
 
         analysis[
             "price_status"
@@ -700,25 +729,33 @@ def scan_market():
             "unknown"
         )
 
+
         analysis[
             "market_datetime"
-        ] = df.attrs.get(
-            "regular_market_datetime"
-        ).strftime(
-            "%Y-%m-%d %H:%M:%S"
+        ] = (
+            regular_market_datetime
+            .strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
         )
+
 
         analysis[
             "historical_close"
         ] = round(
-            historical_close,
+            float(
+                df["Close"].iloc[-1]
+            ),
             2
         )
+
 
         analysis[
             "current_market_price"
         ] = round(
-            current_market_price,
+            float(
+                current_market_price
+            ),
             2
         )
 
