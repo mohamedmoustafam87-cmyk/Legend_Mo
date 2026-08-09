@@ -47,7 +47,7 @@ def send_scanner_report(opportunities):
 
         current_message = (
             "🏆 *تقرير التحليل الذكي للسوق المصري EGX*\n\n"
-            "📈 *الاستراتيجية: شهر + شهرين*\n"
+            "📈 *الاستراتيجية: التوقعات المستقبلية (شهر + شهرين)*\n"
             "🎯 *الهدف: اختيار السهم + توقيت الدخول*\n"
             "☪️ *بعد فلتر التوافق الشرعي والسيولة*\n\n"
         )
@@ -83,7 +83,7 @@ def send_scanner_report(opportunities):
 
 
             # ======================================================
-            # Trend
+            # Trend & Forecasts
             # ======================================================
 
             trend_status = item.get(
@@ -91,18 +91,28 @@ def send_scanner_report(opportunities):
                 "غير متوفر"
             )
 
-            return_1m = float(
+            forecast_1m_score = int(
                 item.get(
-                    "return_1m",
+                    "forecast_1m_score",
                     0
                 )
             )
 
-            return_2m = float(
+            forecast_2m_score = int(
                 item.get(
-                    "return_2m",
+                    "forecast_2m_score",
                     0
                 )
+            )
+
+            forecast_1m_status = item.get(
+                "forecast_1m_status",
+                "غير متوفر"
+            )
+
+            forecast_2m_status = item.get(
+                "forecast_2m_status",
+                "غير متوفر"
             )
 
             ma200_slope = float(
@@ -293,49 +303,6 @@ def send_scanner_report(opportunities):
 
 
             # ======================================================
-            # Trend Interpretation
-            # ======================================================
-
-            if (
-                return_1m > 0
-                and return_2m > 0
-                and ma200_slope > 0
-                and ema50_slope > 0
-            ):
-
-                trend_message = (
-                    "🟢 الاتجاه إيجابي ومتوافق للشهر والشهرين"
-                )
-
-            elif (
-                return_1m > 0
-                and return_2m > 0
-            ):
-
-                trend_message = (
-                    "🟢 الاتجاه إيجابي للشهر والشهرين"
-                )
-
-            elif return_2m > 0:
-
-                trend_message = (
-                    "🟡 الاتجاه إيجابي على مدى شهرين"
-                )
-
-            elif return_1m > 0:
-
-                trend_message = (
-                    "🟡 الاتجاه إيجابي على مدى شهر"
-                )
-
-            else:
-
-                trend_message = (
-                    "🔴 الاتجاه يحتاج متابعة"
-                )
-
-
-            # ======================================================
             # Score Interpretation
             # ======================================================
 
@@ -382,22 +349,19 @@ def send_scanner_report(opportunities):
 
 
                 # --------------------------------------------------
-                # Trend
+                # Future Forecasts
                 # --------------------------------------------------
 
-                f"📈 *الاتجاه المتوقع:*\n"
+                f"📈 *التوقعات المستقبلية:*\n"
 
-                f"• آخر شهر: "
-                f"`{return_1m:+.1f}%`\n"
+                f"• الشهر القادم: `{forecast_1m_score}/100`\n"
+                f"  {forecast_1m_status}\n"
 
-                f"• آخر شهرين: "
-                f"`{return_2m:+.1f}%`\n"
+                f"• الشهرين القادمين: `{forecast_2m_score}/100`\n"
+                f"  {forecast_2m_status}\n"
 
-                f"• الحالة: "
-                f"{trend_status}\n"
-
-                f"• التقييم: "
-                f"{trend_message}\n\n"
+                f"• الحالة العامة: "
+                f"{trend_status}\n\n"
 
 
                 # --------------------------------------------------
@@ -590,7 +554,7 @@ def send_scanner_report(opportunities):
 
         print(
             "✅ تم إرسال تقرير التحليل "
-            "والاتجاه والدخول وإدارة المخاطر بنجاح."
+            "والتوقعات والدخول وإدارة المخاطر بنجاح."
         )
 
 
