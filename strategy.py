@@ -468,51 +468,45 @@ def evaluate_stock_strategy(df, ticker_symbol):
 
         if forecast_1m_score >= 85:
             forecast_1m_status = "🔥 ترشيح قوي للشهر القادم"
-        elif forecast_1m_score >= 75:
+        elif forecast_1m_score >= 70:
             forecast_1m_status = "🟢 ترشيح جيد للشهر القادم"
-        elif forecast_1m_score >= 65:
+        elif forecast_1m_score >= 55:
             forecast_1m_status = "🟡 مراقبة للشهر القادم"
         else:
             forecast_1m_status = "🔴 ترشيح ضعيف للشهر القادم"
 
         if forecast_2m_score >= 85:
             forecast_2m_status = "🔥 ترشيح قوي للشهرين القادمين"
-        elif forecast_2m_score >= 75:
+        elif forecast_2m_score >= 70:
             forecast_2m_status = "🟢 ترشيح جيد للشهرين القادمين"
-        elif forecast_2m_score >= 65:
+        elif forecast_2m_score >= 55:
             forecast_2m_status = "🟡 مراقبة للشهرين القادمين"
         else:
             forecast_2m_status = "🔴 ترشيح ضعيف للشهرين القادمين"
 
         if (
-            forecast_1m_score >= 75
-            and forecast_2m_score >= 75
-        ):
-            trend_status = "🟢 اتجاه حالي داعم للشهر والشهرين القادمين"
-        elif forecast_1m_score >= 75:
-            trend_status = "🟢 Setup أقوى للشهر القادم"
-        elif forecast_2m_score >= 75:
-            trend_status = "🟢 Setup أقوى للشهرين القادمين"
-        elif (
             forecast_1m_score >= 65
             and forecast_2m_score >= 65
         ):
-            trend_status = "🟡 Setup متوسط ويحتاج متابعة"
+            trend_status = "🟢 اتجاه حالي داعم للشهر والشهرين القادمين"
+        elif forecast_1m_score >= 65:
+            trend_status = "🟢 Setup أقوى للشهر القادم"
+        elif forecast_2m_score >= 65:
+            trend_status = "🟢 Setup أقوى للشهرين القادمين"
         else:
-            trend_status = "🔴 Setup المستقبلي ضعيف"
+            trend_status = "🟡 Setup متوسط ويحتاج متابعة"
 
         # ==========================================================
-        # Entry Analysis (Adjusted for Momentum Stocks)
+        # Entry Analysis (Flexible for Momentum Stocks)
         # ==========================================================
 
-        # السماح للأسهم الصاروخية بتجاوز النسبة التقليدية طالما التوقعات المستقبلية قوية
         overextended = (
-            distance_from_ema > 25
-            and forecast_1m_score < 75
+            distance_from_ema > 30
+            and forecast_1m_score < 60
         )
 
         too_far_below_ema = (
-            distance_from_ema < -8
+            distance_from_ema < -10
         )
 
         entry_candidates = [
@@ -538,15 +532,10 @@ def evaluate_stock_strategy(df, ticker_symbol):
             entry_status = "🟡 WAIT - السعر ممتد فوق EMA20"
         elif too_far_below_ema:
             entry_status = "🟡 WAIT - السعر أسفل مناطق الدعم"
-        elif breakout or forecast_1m_score >= 75:
+        elif breakout or forecast_1m_score >= 60:
             entry_status = "🟢 BUY - Strong Momentum / Breakout"
-        elif (
-            close_price >= ideal_entry
-            and close_price <= entry_high * 1.02
-        ):
-            entry_status = "🟢 BUY ZONE"
         else:
-            entry_status = "🟡 WATCH - انتظار نقطة دخول أفضل"
+            entry_status = "🟢 BUY ZONE / WATCH"
 
         # ==========================================================
         # Risk Management
@@ -569,38 +558,17 @@ def evaluate_stock_strategy(df, ticker_symbol):
             return None
 
         # ==========================================================
-        # Final Recommendation
+        # Final Recommendation (Flexible to Always Show Opportunities)
         # ==========================================================
 
         if score < MIN_SCORE_THRESHOLD:
-            recommendation = "🔴 لا توجد إشارة شراء كافية"
-        elif (
-            score >= 90
-            and forecast_1m_score >= 75
-            and forecast_2m_score >= 75
-            and entry_status.startswith("🟢")
-        ):
+            return None  # استبعاد ما دون الحد الأدنى الجديد (60) لضمان ظهور الباقي فقط
+        elif score >= 80 and forecast_1m_score >= 70:
             recommendation = "🔥 شراء قوي جداً"
-        elif (
-            score >= 85
-            and (
-                forecast_1m_score >= 75
-                or forecast_2m_score >= 75
-            )
-            and entry_status.startswith("🟢")
-        ):
+        elif score >= 70:
             recommendation = "🟢 فرصة شراء قوية"
-        elif (
-            forecast_1m_score >= 75
-            and forecast_2m_score >= 75
-            and entry_status.startswith("🟢")
-        ):
+        elif score >= 60:
             recommendation = "🟡 فرصة شراء جيدة"
-        elif (
-            forecast_1m_score >= 75
-            or forecast_2m_score >= 75
-        ):
-            recommendation = "🟡 WATCH - التوقع إيجابي وانتظر دخول أفضل"
         else:
             recommendation = "🟡 WATCH"
 
