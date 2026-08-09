@@ -74,11 +74,41 @@ def send_scanner_report(opportunities):
                 )
             )
 
+
+            # ======================================================
+            # Current Price
+            # ======================================================
+
             price = float(
                 item.get(
-                    "price",
+                    "current_market_price",
+                    item.get(
+                        "price",
+                        0
+                    )
+                )
+            )
+
+            historical_close = float(
+                item.get(
+                    "historical_close",
                     0
                 )
+            )
+
+            price_status = item.get(
+                "price_status",
+                "غير متوفر"
+            )
+
+            price_source = item.get(
+                "price_source",
+                "غير متوفر"
+            )
+
+            market_datetime = item.get(
+                "market_datetime",
+                "غير متوفر"
             )
 
 
@@ -332,6 +362,29 @@ def send_scanner_report(opportunities):
 
 
             # ======================================================
+            # Price Freshness Interpretation
+            # ======================================================
+
+            if price_status == "fresh":
+
+                freshness_message = (
+                    "🟢 *السعر حديث*"
+                )
+
+            elif price_status == "stale_session":
+
+                freshness_message = (
+                    "🔴 *السعر من جلسة سابقة*"
+                )
+
+            else:
+
+                freshness_message = (
+                    "🟡 *حالة السعر غير مؤكدة*"
+                )
+
+
+            # ======================================================
             # Stock Message
             # ======================================================
 
@@ -354,10 +407,14 @@ def send_scanner_report(opportunities):
 
                 f"📈 *التوقعات المستقبلية:*\n"
 
-                f"• الشهر القادم: `{forecast_1m_score}/100`\n"
+                f"• الشهر القادم: "
+                f"`{forecast_1m_score}/100`\n"
+
                 f"  {forecast_1m_status}\n"
 
-                f"• الشهرين القادمين: `{forecast_2m_score}/100`\n"
+                f"• الشهرين القادمين: "
+                f"`{forecast_2m_score}/100`\n"
+
                 f"  {forecast_2m_status}\n"
 
                 f"• الحالة العامة: "
@@ -365,11 +422,22 @@ def send_scanner_report(opportunities):
 
 
                 # --------------------------------------------------
-                # Current Price
+                # Current Market Price
                 # --------------------------------------------------
 
                 f"💵 *السعر الحالي:* "
-                f"`{price:.2f}` ج.م\n\n"
+                f"`{price:.2f}` ج.م\n"
+
+                f"📅 *آخر إغلاق يومي:* "
+                f"`{historical_close:.2f}` ج.م\n"
+
+                f"🕐 *آخر تحديث للسعر:* "
+                f"`{market_datetime}`\n"
+
+                f"📡 *مصدر السعر:* "
+                f"`{price_source}`\n"
+
+                f"{freshness_message}\n\n"
 
 
                 # --------------------------------------------------
@@ -562,4 +630,4 @@ def send_scanner_report(opportunities):
 
         print(
             f"❌ Error sending report: {e}"
-        )
+                )
