@@ -10,7 +10,8 @@ from config import (
     SHARIA_EGX_STOCKS,
     MIN_SCORE_THRESHOLD,
     MIN_AVG_DAILY_VALUE,
-    MIN_AVG_VOLUME
+    MIN_AVG_VOLUME,
+    EGX_HOLIDAYS_2026
 )
 
 from indicators import (
@@ -23,12 +24,17 @@ from strategy import evaluate_stock_strategy
 
 # ==========================================================
 # Yahoo Finance API
+#
+# مهم: بنستخدم أكتر من subdomain (query1 / query2) كـ fallback،
+# لأن IP بتاع GitHub Actions بيضرب أحياناً Cache قديم جداً عند
+# Yahoo (لوحظ إرجاع regularMarketTime من سنتين كامل لكل الأسهم
+# دفعة واحدة، وده مش طبيعي أبداً ولازم يترفض).
 # ==========================================================
 
-YAHOO_URL = (
-    "https://query1.finance.yahoo.com/"
-    "v8/finance/chart/"
-)
+YAHOO_HOSTS = [
+    "https://query1.finance.yahoo.com/v8/finance/chart/",
+    "https://query2.finance.yahoo.com/v8/finance/chart/",
+]
 
 
 # ==========================================================
@@ -49,7 +55,9 @@ SESSION.headers.update({
         "AppleWebKit/537.36 "
         "(KHTML, like Gecko) "
         "Chrome/120.0 Safari/537.36"
-    )
+    ),
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
 })
 
 REQUEST_DELAY_SECONDS = 0.6
@@ -88,19 +96,32 @@ EGX_CLOSE_TIME = dt_time(
 
 
 # ==========================================================
+# Is EGX Holiday
+#
+# بيتحقق من تقويم عطلات EGX الرسمي (EGX_HOLIDAYS_2026 في
+# config.py) بالإضافة إلى الجمعة/السبت. لازم يتحدّث القاموس
+# ده كل سنة (راجع الملاحظة في config.py).
+# ==========================================================
+
+def is_egx_holiday(date_value):
+
+    date_string = date_value.strftime(
+        "%Y-%m-%d"
+    )
+
+    return date_string in EGX_HOLIDAYS_2026
+
+
+# ==========================================================
 # Get Last Expected Trading Day
 #
 # This handles:
 #
 # Friday
 # Saturday
+# Official EGX holidays (Eid, national holidays...)
 #
-# and avoids assuming that every calendar day
-# is an EGX trading day.
-#
-# ملاحظة: ده بيتخطى الجمعة والسبت بس، مش أعياد
-# مصر الرسمية. لو حابب دقة أعلى، محتاجين نضيف
-# تقويم عطلات EGX لاحقاً.
+# ويتجنب افتراض إن كل يوم تقويمي هو يوم تداول.
 # ==========================================================
 
 def get_previous_trading_day(date_value):
@@ -123,9 +144,9 @@ def get_previous_trading_day(date_value):
         # Friday = 4
         # Saturday = 5
 
-        if current_date.weekday() not in (
-            4,
-            5
+        if (
+            current_date.weekday() not in (4, 5)
+            and not is_egx_holiday(current_date)
         ):
 
             return current_date
@@ -149,12 +170,12 @@ def get_market_session_status():
 
 
     # ======================================================
-    # Friday / Saturday
+    # Friday / Saturday / Official EGX Holiday
     # ======================================================
 
-    if weekday in (
-        4,
-        5
+    if (
+        weekday in (4, 5)
+        or is_egx_holiday(today)
     ):
 
         return {
@@ -391,34 +412,103 @@ def validate_market_freshness(
 # بتضيع بسبب مشاكل شبكة عابرة.
 # ==========================================================
 
-def fetch_with_retry(url):
+def fetch_with_retry(symbol):
 
     last_error = None
 
-    for attempt in range(1, MAX_RETRIES + 1):
+    attempt = 0
 
-        try:
+    for host in YAHOO_HOSTS:
 
-            response = SESSION.get(
-                url,
-                timeout=15
+        for local_try in range(1, MAX_RETRIES + 1):
+
+            attempt += 1
+
+            # Cache-busting timestamp param — بيمنع أي CDN
+            # أو Cache وسيط إنه يرجّع نسخة قديمة مخزّنة.
+
+            cache_buster = int(
+                time.time() * 1000
             )
 
-            response.raise_for_status()
+            url = (
+                f"{host}{symbol}"
+                f"?interval=1d"
+                f"&range=2y"
+                f"&events=history"
+                f"&includeAdjustedClose=true"
+                f"&_={cache_buster}"
+            )
 
-            return response
+            try:
 
-        except requests.exceptions.RequestException as e:
-
-            last_error = e
-
-            if attempt < MAX_RETRIES:
-
-                time.sleep(
-                    REQUEST_DELAY_SECONDS * attempt
+                response = SESSION.get(
+                    url,
+                    timeout=15
                 )
 
+                response.raise_for_status()
+
+                return response
+
+            except requests.exceptions.RequestException as e:
+
+                last_error = e
+
+                if local_try < MAX_RETRIES:
+
+                    time.sleep(
+                        REQUEST_DELAY_SECONDS * local_try
+                    )
+
     raise last_error
+
+
+# ==========================================================
+# Systemic Stale Cache Detection
+#
+# لو نفس الطابع الزمني القديم اتكرر لعدد كبير من الأسهم
+# ورا بعض، ده مش مصادفة — ده مؤشر قوي إن Yahoo بيرجّع
+# نسخة Cache قديمة موحدة (غالباً بسبب IP بتاع GitHub
+# Actions). بنطبع تحذير واضح مرة واحدة بس عشان تعرف
+# إن المشكلة نظامية مش خاصة بسهم معين.
+# ==========================================================
+
+_last_stale_timestamp = None
+_consecutive_identical_stale = 0
+_systemic_warning_shown = False
+
+
+def track_systemic_stale_cache(market_time_unix):
+
+    global _last_stale_timestamp
+    global _consecutive_identical_stale
+    global _systemic_warning_shown
+
+    if market_time_unix == _last_stale_timestamp:
+
+        _consecutive_identical_stale += 1
+
+    else:
+
+        _last_stale_timestamp = market_time_unix
+        _consecutive_identical_stale = 1
+
+    if (
+        _consecutive_identical_stale >= 10
+        and not _systemic_warning_shown
+    ):
+
+        _systemic_warning_shown = True
+
+        print(
+            "\n🚨 تحذير نظامي: أكثر من 10 أسهم متتالية "
+            "رجعوا بنفس الطابع الزمني القديم بالظبط.\n"
+            "🚨 ده مش مشكلة سهم واحد — على الأرجح Yahoo بيرجّع "
+            "نسخة Cache قديمة لـIP بتاع GitHub Actions.\n"
+            "🚨 راجع دعم fetch_with_retry / YAHOO_HOSTS، أو جرب "
+            "تشغيل يدوي (workflow_dispatch) في وقت مختلف.\n"
+        )
 
 
 # ==========================================================
@@ -429,16 +519,8 @@ def get_stock_data(symbol):
 
     try:
 
-        url = (
-            f"{YAHOO_URL}{symbol}"
-            f"?interval=1d"
-            f"&range=2y"
-            f"&events=history"
-            f"&includeAdjustedClose=true"
-        )
-
         response = fetch_with_retry(
-            url
+            symbol
         )
 
         data = response.json()
@@ -579,6 +661,10 @@ def get_stock_data(symbol):
 
 
         if not freshness_ok:
+
+            track_systemic_stale_cache(
+                regular_market_time
+            )
 
             print(
                 f"⛔ {symbol} → "
