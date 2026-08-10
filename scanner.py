@@ -1,7 +1,8 @@
+import time
 import requests
 import pandas as pd
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
 
 from config import (
@@ -12,7 +13,11 @@ from config import (
     MIN_AVG_VOLUME
 )
 
-from indicators import calculate_indicators
+from indicators import (
+    calculate_indicators,
+    analyze_candlesticks
+)
+
 from strategy import evaluate_stock_strategy
 
 
@@ -24,6 +29,32 @@ YAHOO_URL = (
     "https://query1.finance.yahoo.com/"
     "v8/finance/chart/"
 )
+
+
+# ==========================================================
+# Shared HTTP Session + Rate Limiting
+#
+# مهم: البوت بيعمل ~230 طلب متتالي لـYahoo على كل تشغيل.
+# من غير Session وتأخير بسيط بين الطلبات، فيه خطر حقيقي
+# إن IP بتاع GitHub Actions يتحظر مؤقتاً أو يحصل timeout
+# جماعي لباقي الأسهم.
+# ==========================================================
+
+SESSION = requests.Session()
+
+SESSION.headers.update({
+    "User-Agent": (
+        "Mozilla/5.0 "
+        "(Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 "
+        "(KHTML, like Gecko) "
+        "Chrome/120.0 Safari/537.36"
+    )
+})
+
+REQUEST_DELAY_SECONDS = 0.6
+
+MAX_RETRIES = 2
 
 
 # ==========================================================
@@ -45,12 +76,12 @@ CAIRO_TZ = ZoneInfo(
 # 10:00 AM -> 2:30 PM Cairo time
 # ==========================================================
 
-EGX_OPEN_TIME = time(
+EGX_OPEN_TIME = dt_time(
     10,
     0
 )
 
-EGX_CLOSE_TIME = time(
+EGX_CLOSE_TIME = dt_time(
     14,
     30
 )
@@ -66,6 +97,10 @@ EGX_CLOSE_TIME = time(
 #
 # and avoids assuming that every calendar day
 # is an EGX trading day.
+#
+# ملاحظة: ده بيتخطى الجمعة والسبت بس، مش أعياد
+# مصر الرسمية. لو حابب دقة أعلى، محتاجين نضيف
+# تقويم عطلات EGX لاحقاً.
 # ==========================================================
 
 def get_previous_trading_day(date_value):
@@ -349,6 +384,44 @@ def validate_market_freshness(
 
 
 # ==========================================================
+# Fetch With Retry
+#
+# محاولة إضافية واحدة (Retry) لو حصل Timeout أو خطأ شبكة
+# مؤقت، قبل ما نستسلم للسهم ده. ده بيقلل عدد الأسهم اللي
+# بتضيع بسبب مشاكل شبكة عابرة.
+# ==========================================================
+
+def fetch_with_retry(url):
+
+    last_error = None
+
+    for attempt in range(1, MAX_RETRIES + 1):
+
+        try:
+
+            response = SESSION.get(
+                url,
+                timeout=15
+            )
+
+            response.raise_for_status()
+
+            return response
+
+        except requests.exceptions.RequestException as e:
+
+            last_error = e
+
+            if attempt < MAX_RETRIES:
+
+                time.sleep(
+                    REQUEST_DELAY_SECONDS * attempt
+                )
+
+    raise last_error
+
+
+# ==========================================================
 # Get Stock Data
 # ==========================================================
 
@@ -364,23 +437,9 @@ def get_stock_data(symbol):
             f"&includeAdjustedClose=true"
         )
 
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 "
-                "(Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 "
-                "(KHTML, like Gecko) "
-                "Chrome/120.0 Safari/537.36"
-            )
-        }
-
-        response = requests.get(
-            url,
-            headers=headers,
-            timeout=15
+        response = fetch_with_retry(
+            url
         )
-
-        response.raise_for_status()
 
         data = response.json()
 
@@ -541,10 +600,7 @@ def get_stock_data(symbol):
                 f"{regular_market_price:.2f}"
             )
 
-            continue_status = False
-
-            if not continue_status:
-                return None
+            return None
 
 
         # ======================================================
@@ -869,11 +925,6 @@ def scan_market():
     )
 
     print(
-        f"☪️ Sharia Filter: "
-        f"{len(sharia_stocks)} stocks"
-    )
-
-    print(
         "====================================\n"
     )
 
@@ -895,6 +946,11 @@ def scan_market():
 
         # ======================================================
         # Sharia Filter
+        #
+        # ملاحظة: SHARIA_EGX_STOCKS == EGX_STOCKS حالياً،
+        # يعني الفلتر ده مش بيستبعد حاجة فعلياً. سايبينه
+        # موجود عشان لو حبيت ترجع تفعّل قائمة شرعية حقيقية
+        # لاحقاً، البنية جاهزة.
         # ======================================================
 
         if symbol not in sharia_stocks:
@@ -905,6 +961,15 @@ def scan_market():
             )
 
             continue
+
+
+        # ======================================================
+        # Rate Limiting
+        # ======================================================
+
+        time.sleep(
+            REQUEST_DELAY_SECONDS
+        )
 
 
         # ======================================================
@@ -966,6 +1031,24 @@ def scan_market():
 
 
         # ======================================================
+        # Candlestick Analysis (FIXED)
+        #
+        # مهم جداً: بيتحسب هنا، قبل ما نستبدل آخر Close
+        # بالسعر الحي. لو اتحسب بعد الاستبدال، هيقارن
+        # Open/High/Low التاريخية مع Close لحظي، وده بيدي
+        # شموع وهمية (Hammer / Engulfing غير حقيقية).
+        # ==========================================================
+
+        candle_reasons = analyze_candlesticks(
+            df
+        )
+
+        df.attrs[
+            "candle_reasons"
+        ] = candle_reasons
+
+
+        # ======================================================
         # Get Current Yahoo Market Price
         # ======================================================
 
@@ -1007,8 +1090,10 @@ def scan_market():
         # Therefore:
         #
         # 1. Indicators are calculated first.
-        # 2. Historical Close is saved.
-        # 3. ONLY the latest Close is replaced
+        # 2. Candlestick patterns are analyzed on the
+        #    REAL historical candle (see fix above).
+        # 3. Historical Close is saved.
+        # 4. ONLY the latest Close is replaced
         #    with Yahoo regularMarketPrice.
         #
         # We do NOT recalculate indicators.
@@ -1172,11 +1257,6 @@ def scan_market():
     print(
         f"📊 Universe: "
         f"{total_stocks} stocks"
-    )
-
-    print(
-        f"☪️ Sharia Universe: "
-        f"{len(sharia_stocks)} stocks"
     )
 
     print(
