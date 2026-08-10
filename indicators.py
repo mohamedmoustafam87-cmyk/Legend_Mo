@@ -467,46 +467,6 @@ def calculate_indicators(df):
     ) * 100
 
     # ==========================================================
-    # One Month Return
-    # حوالي 21 جلسة تداول
-    # ==========================================================
-
-    df["Return_1M"] = (
-        (
-            df["Close"] -
-            df["Close"].shift(21)
-        )
-        /
-        df["Close"].shift(21)
-    ) * 100
-
-    # ==========================================================
-    # Two Month Return
-    # حوالي 42 جلسة تداول
-    # ==========================================================
-
-    df["Return_2M"] = (
-        (
-            df["Close"] -
-            df["Close"].shift(42)
-        )
-        /
-        df["Close"].shift(42)
-    ) * 100
-
-    # ==========================================================
-    # Bullish Trend Flags
-    # ==========================================================
-
-    df["Bullish_1M"] = (
-        df["Return_1M"] > 0
-    )
-
-    df["Bullish_2M"] = (
-        df["Return_2M"] > 0
-    )
-
-    # ==========================================================
     # Clean Infinite Values
     # ==========================================================
 
@@ -524,6 +484,10 @@ def calculate_indicators(df):
 
 # ==========================================================
 # Candlestick Analysis
+#
+# مهم: بتتنادى من scanner.py قبل ما يتم استبدال آخر Close
+# بالسعر الحي، عشان الشمعة المحللة تكون حقيقية بالكامل
+# (Open/High/Low/Close كلهم من نفس الجلسة التاريخية).
 # ==========================================================
 
 def analyze_candlesticks(df):
@@ -627,46 +591,3 @@ def analyze_candlesticks(df):
         )
 
     return reasons
-
-
-# ==========================================================
-# Compatibility Function
-# ==========================================================
-#
-# هذه الدالة موجودة للتوافق مع أي كود قديم يستدعي
-# analyze_stock().
-#
-# scanner.py الجديد يستخدم مباشرة:
-#
-# calculate_indicators()
-#        ↓
-# evaluate_stock_strategy()
-#
-# وبالتالي لن يتم حساب المؤشرات مرتين.
-# ==========================================================
-
-def analyze_stock(df, symbol):
-
-    try:
-
-        df = calculate_indicators(
-            df
-        )
-
-        if df is None or df.empty:
-            return None
-
-        from strategy import evaluate_stock_strategy
-
-        return evaluate_stock_strategy(
-            df,
-            symbol
-        )
-
-    except Exception as e:
-
-        print(
-            f"Error analyzing {symbol}: {e}"
-        )
-
-        return None
