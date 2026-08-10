@@ -27,6 +27,11 @@ RISK_PER_TRADE = 0.01
 # أقل Score لإظهار السهم
 MIN_SCORE_THRESHOLD = 60
 
+# أقل قيمة مقبولة لتوقعات الشهر والشهرين القادمين
+# (forecast_1m_score / forecast_2m_score) عشان السهم
+# يدخل التقرير أصلاً. السهم لازم يحقق الحدين الاتنين.
+FORECAST_MIN_THRESHOLD = 55
+
 
 # ==========================================================
 # EGX Official Holidays 2026
