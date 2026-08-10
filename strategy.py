@@ -1,6 +1,5 @@
 from config import MIN_SCORE_THRESHOLD
 from risk import calculate_risk_management
-from indicators import analyze_candlesticks
 
 
 def evaluate_stock_strategy(df, ticker_symbol):
@@ -305,14 +304,19 @@ def evaluate_stock_strategy(df, ticker_symbol):
         ) * 100
 
         # ==========================================================
-        # Candlestick Confirmation
+        # Candlestick Confirmation (FIXED)
         #
-        # الشموع تظل مبنية على آخر Daily Candle
-        # وليس السعر الحالي اللحظي.
+        # مهم: الشموع بقت بتتحسب في scanner.py قبل ما
+        # يتم استبدال آخر Close بالسعر الحي، عشان الشمعة
+        # المحللة تكون حقيقية (Open/High/Low/Close كلهم
+        # من نفس الجلسة التاريخية). هنا بس بنقرأ النتيجة
+        # الجاهزة من df.attrs بدل ما نعيد حسابها على بيانات
+        # مخلوطة (Close حي مع Open/High/Low تاريخي).
         # ==========================================================
 
-        candle_reasons = analyze_candlesticks(
-            df
+        candle_reasons = df.attrs.get(
+            "candle_reasons",
+            []
         )
 
         # ==========================================================
