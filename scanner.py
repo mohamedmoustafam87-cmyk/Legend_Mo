@@ -9,6 +9,7 @@ from config import (
     EGX_STOCKS,
     SHARIA_EGX_STOCKS,
     MIN_SCORE_THRESHOLD,
+    FORECAST_MIN_THRESHOLD,
     MIN_AVG_DAILY_VALUE,
     MIN_AVG_VOLUME,
     EGX_HOLIDAYS_2026
@@ -405,6 +406,65 @@ def validate_market_freshness(
 
 
 # ==========================================================
+# Validate Daily Bar Freshness (FALLBACK)
+#
+# مهم جداً: اكتشفنا إن meta.regularMarketPrice/regularMarketTime
+# من Yahoo بقت مجمّدة ومتوقفة عن التحديث لأسهم EGX (ثابتة على
+# تاريخ من يوليو 2024 لكل الأسهم بلا استثناء). بدل ما نرفض كل
+# الأسهم بسبب meta المكسور، بنتحقق من تاريخ آخر شمعة يومية في
+# نفس الاستجابة (لسه بتتحدث من فيد تاني عند Yahoo)، ونستخدمها
+# كـ "current price" بديل موثوق لو كانت من جلسة حديثة فعلاً.
+#
+# الفرق المهم: ده سعر إغلاق آخر جلسة مكتملة (EOD)، مش سعر لحظي.
+# بنوضح ده بصراحة في price_status عشان القرار يبقى واعي.
+# ==========================================================
+
+def validate_daily_bar_freshness(last_bar_date):
+
+    try:
+
+        session = get_market_session_status()
+
+        expected_date = session[
+            "expected_date"
+        ]
+
+        if last_bar_date == expected_date:
+
+            return (
+                True,
+                "EOD_CLOSE_FRESH"
+            )
+
+        previous_date = get_previous_trading_day(
+            expected_date
+        )
+
+        if last_bar_date == previous_date:
+
+            return (
+                True,
+                "EOD_CLOSE_LAST_VALID"
+            )
+
+        return (
+            False,
+            "EOD_CLOSE_STALE"
+        )
+
+    except Exception as e:
+
+        print(
+            f"⚠️ Daily bar freshness validation error: {e}"
+        )
+
+        return (
+            False,
+            "VALIDATION_ERROR"
+        )
+
+
+# ==========================================================
 # Fetch With Retry
 #
 # محاولة إضافية واحدة (Retry) لو حصل Timeout أو خطأ شبكة
@@ -578,119 +638,12 @@ def get_stock_data(symbol):
 
 
         # ======================================================
-        # Validate Current Market Price
-        # ======================================================
-
-        if regular_market_price is None:
-
-            print(
-                f"⚠️ {symbol} → "
-                f"Yahoo did not provide regularMarketPrice"
-            )
-
-            return None
-
-
-        if regular_market_time is None:
-
-            print(
-                f"⚠️ {symbol} → "
-                f"Yahoo did not provide regularMarketTime"
-            )
-
-            return None
-
-
-        try:
-
-            regular_market_price = float(
-                regular_market_price
-            )
-
-            regular_market_time = int(
-                regular_market_time
-            )
-
-        except (
-            TypeError,
-            ValueError
-        ):
-
-            print(
-                f"⚠️ {symbol} → "
-                f"Invalid Yahoo market metadata"
-            )
-
-            return None
-
-
-        if regular_market_price <= 0:
-
-            print(
-                f"⚠️ {symbol} → "
-                f"Invalid current market price"
-            )
-
-            return None
-
-
-        # ======================================================
-        # Convert Yahoo Timestamp To Cairo Time
-        # ======================================================
-
-        market_datetime = datetime.fromtimestamp(
-            regular_market_time,
-            tz=CAIRO_TZ
-        )
-
-
-        cairo_now = datetime.now(
-            CAIRO_TZ
-        )
-
-
-        # ======================================================
-        # Session-Aware Freshness Check
-        # ======================================================
-
-        freshness_ok, price_status = (
-            validate_market_freshness(
-                market_datetime
-            )
-        )
-
-
-        if not freshness_ok:
-
-            track_systemic_stale_cache(
-                regular_market_time
-            )
-
-            print(
-                f"⛔ {symbol} → "
-                f"{price_status}"
-            )
-
-            print(
-                f"   Yahoo market time: "
-                f"{market_datetime.strftime('%Y-%m-%d %H:%M:%S')}"
-            )
-
-            print(
-                f"   Cairo current time: "
-                f"{cairo_now.strftime('%Y-%m-%d %H:%M:%S')}"
-            )
-
-            print(
-                f"   Yahoo price: "
-                f"{regular_market_price:.2f}"
-            )
-
-            return None
-
-
-        # ======================================================
-        # Get Historical Daily Data
+        # Parse Historical Daily Data First
+        #
+        # مهم: بنبني الـDataFrame قبل ما نقرر أي حاجة عن
+        # الـfreshness، عشان لو meta كانت مكسورة (زي ما اكتشفنا)
+        # نقدر نستخدم آخر شمعة يومية كـfallback بدل ما نرفض
+        # السهم على طول.
         # ======================================================
 
         timestamps = result.get(
@@ -785,12 +738,159 @@ def get_stock_data(symbol):
 
 
         # ======================================================
-        # Historical Close
+        # Historical Close (last daily bar)
         # ======================================================
 
         historical_close = float(
             df["Close"].iloc[-1]
         )
+
+        last_bar_date = df.index[-1].date()
+
+        cairo_now = datetime.now(
+            CAIRO_TZ
+        )
+
+
+        # ======================================================
+        # Attempt 1: Live Meta Price (regularMarketPrice)
+        # ======================================================
+
+        current_market_price = None
+        market_datetime = None
+        price_status = None
+
+        meta_usable = (
+            regular_market_price is not None
+            and regular_market_time is not None
+        )
+
+        if meta_usable:
+
+            try:
+
+                meta_price = float(
+                    regular_market_price
+                )
+
+                meta_time = int(
+                    regular_market_time
+                )
+
+            except (TypeError, ValueError):
+
+                meta_usable = False
+
+        if meta_usable and meta_price > 0:
+
+            meta_datetime = datetime.fromtimestamp(
+                meta_time,
+                tz=CAIRO_TZ
+            )
+
+            meta_fresh, meta_status = (
+                validate_market_freshness(
+                    meta_datetime
+                )
+            )
+
+            if meta_fresh:
+
+                current_market_price = meta_price
+                market_datetime = meta_datetime
+                price_status = meta_status
+
+            else:
+
+                track_systemic_stale_cache(
+                    meta_time
+                )
+
+                print(
+                    f"⛔ {symbol} → meta {meta_status} "
+                    f"(Yahoo meta time: "
+                    f"{meta_datetime.strftime('%Y-%m-%d %H:%M:%S')}, "
+                    f"price: {meta_price:.2f}) "
+                    f"→ trying daily-bar fallback..."
+                )
+
+        else:
+
+            print(
+                f"⚠️ {symbol} → Yahoo meta missing/invalid, "
+                f"trying daily-bar fallback..."
+            )
+
+
+        # ======================================================
+        # Attempt 2: Daily Bar Fallback
+        #
+        # لو الـmeta فشلت أو مكسورة، نستخدم آخر شمعة يومية
+        # كـ"current price"، مع توضيح واضح إنه سعر إغلاق آخر
+        # جلسة (EOD) مش سعر لحظي.
+        # ======================================================
+
+        if current_market_price is None:
+
+            bar_fresh, bar_status = (
+                validate_daily_bar_freshness(
+                    last_bar_date
+                )
+            )
+
+            if bar_fresh:
+
+                current_market_price = historical_close
+
+                market_datetime = datetime.combine(
+                    last_bar_date,
+                    dt_time(0, 0),
+                    tzinfo=CAIRO_TZ
+                )
+
+                price_status = bar_status
+
+                print(
+                    f"🟡 {symbol} → استخدام سعر إغلاق آخر جلسة "
+                    f"({bar_status}) كبديل عن meta المكسورة"
+                )
+
+            else:
+
+                # ==================================================
+                # لا يوجد مصدر حديث (لا meta ولا الشمعة اليومية).
+                #
+                # بناءً على طلب المستخدم: لا يتم استبعاد السهم.
+                # بدل كده، بنستخدم آخر سعر متاح مع تعليم واضح
+                # جداً إنه مش لحظي + التاريخ الحقيقي بتاعه، عشان
+                # القرار يبقى بإيد المستخدم مش مخفي عنه.
+                # ==================================================
+
+                current_market_price = historical_close
+
+                market_datetime = datetime.combine(
+                    last_bar_date,
+                    dt_time(0, 0),
+                    tzinfo=CAIRO_TZ
+                )
+
+                price_status = "STALE_DATA_USED"
+
+                print(
+                    f"⚠️ {symbol} → لا يوجد سعر حديث (meta ولا "
+                    f"الشمعة اليومية). هيتعرض بتحذير صريح "
+                    f"بتاريخ {last_bar_date}"
+                )
+
+
+        if current_market_price <= 0:
+
+            print(
+                f"⚠️ {symbol} → "
+                f"Invalid current market price"
+            )
+
+            return None
 
 
         # ======================================================
@@ -799,12 +899,14 @@ def get_stock_data(symbol):
 
         df.attrs[
             "regular_market_price"
-        ] = regular_market_price
+        ] = current_market_price
 
 
         df.attrs[
             "regular_market_time"
-        ] = regular_market_time
+        ] = int(
+            market_datetime.timestamp()
+        )
 
 
         df.attrs[
@@ -828,8 +930,8 @@ def get_stock_data(symbol):
 
         print(
             f"💵 {symbol} → "
-            f"Yahoo Current Price: "
-            f"{regular_market_price:.2f}"
+            f"Current Price Used: "
+            f"{current_market_price:.2f}"
         )
 
 
@@ -838,23 +940,6 @@ def get_stock_data(symbol):
             f"Latest Daily Close: "
             f"{historical_close:.2f}"
         )
-
-
-        if historical_close > 0:
-
-            difference_pct = (
-                (
-                    regular_market_price
-                    - historical_close
-                )
-                / historical_close
-            ) * 100
-
-            print(
-                f"📈 {symbol} → "
-                f"Current vs Daily Close: "
-                f"{difference_pct:+.2f}%"
-            )
 
 
         print(
@@ -1291,7 +1376,29 @@ def scan_market():
         # Minimum Score Filter
         # ======================================================
 
-        if score >= MIN_SCORE_THRESHOLD:
+        forecast_1m_score = int(
+            analysis.get(
+                "forecast_1m_score",
+                0
+            )
+        )
+
+        forecast_2m_score = int(
+            analysis.get(
+                "forecast_2m_score",
+                0
+            )
+        )
+
+        forecast_ok = (
+            forecast_1m_score >= FORECAST_MIN_THRESHOLD
+            and forecast_2m_score >= FORECAST_MIN_THRESHOLD
+        )
+
+        if (
+            score >= MIN_SCORE_THRESHOLD
+            and forecast_ok
+        ):
 
             opportunities.append(
                 analysis
@@ -1302,7 +1409,18 @@ def scan_market():
                 f"✅ Opportunity found: "
                 f"{symbol} "
                 f"Score={score} "
+                f"Forecast1M={forecast_1m_score} "
+                f"Forecast2M={forecast_2m_score} "
                 f"CurrentPrice={current_market_price:.2f}"
+            )
+
+
+        elif score >= MIN_SCORE_THRESHOLD:
+
+            print(
+                f"🟡 {symbol} "
+                f"Score={score} OK لكن التوقعات ضعيفة "
+                f"(1M={forecast_1m_score}, 2M={forecast_2m_score})"
             )
 
 
@@ -1317,13 +1435,22 @@ def scan_market():
 
     # ==========================================================
     # Sort Opportunities
+    #
+    # الترتيب بقى حسب متوسط التوقعات المستقبلية (شهر + شهرين)
+    # بدل الـScore العام، لأن المستخدم بيتحقق من السعر بنفسه
+    # من مصدر تاني (Thndr)، واللي بيهمه فعلياً هو قوة التوقع
+    # المستقبلي للسهم.
     # ==========================================================
 
+    def forecast_average(item):
+
+        return (
+            item.get("forecast_1m_score", 0)
+            + item.get("forecast_2m_score", 0)
+        ) / 2
+
     opportunities.sort(
-        key=lambda x: x.get(
-            "score",
-            0
-        ),
+        key=forecast_average,
         reverse=True
     )
 
