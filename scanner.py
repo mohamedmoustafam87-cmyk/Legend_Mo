@@ -1,7 +1,7 @@
 import requests
 import pandas as pd
 
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from config import (
@@ -33,6 +33,319 @@ YAHOO_URL = (
 CAIRO_TZ = ZoneInfo(
     "Africa/Cairo"
 )
+
+
+# ==========================================================
+# EGX Trading Session
+#
+# EGX trading days:
+# Sunday -> Thursday
+#
+# Normal session:
+# 10:00 AM -> 2:30 PM Cairo time
+# ==========================================================
+
+EGX_OPEN_TIME = time(
+    10,
+    0
+)
+
+EGX_CLOSE_TIME = time(
+    14,
+    30
+)
+
+
+# ==========================================================
+# Get Last Expected Trading Day
+#
+# This handles:
+#
+# Friday
+# Saturday
+#
+# and avoids assuming that every calendar day
+# is an EGX trading day.
+# ==========================================================
+
+def get_previous_trading_day(date_value):
+
+    current_date = date_value
+
+    while True:
+
+        current_date -= timedelta(
+            days=1
+        )
+
+        # EGX trading days:
+        # Sunday = 6
+        # Monday = 0
+        # Tuesday = 1
+        # Wednesday = 2
+        # Thursday = 3
+        #
+        # Friday = 4
+        # Saturday = 5
+
+        if current_date.weekday() not in (
+            4,
+            5
+        ):
+
+            return current_date
+
+
+# ==========================================================
+# Determine Expected Market Session
+# ==========================================================
+
+def get_market_session_status():
+
+    cairo_now = datetime.now(
+        CAIRO_TZ
+    )
+
+    today = cairo_now.date()
+
+    current_time = cairo_now.time()
+
+    weekday = today.weekday()
+
+
+    # ======================================================
+    # Friday / Saturday
+    # ======================================================
+
+    if weekday in (
+        4,
+        5
+    ):
+
+        return {
+            "status": "CLOSED_NON_TRADING_DAY",
+            "today": today,
+            "expected_date": get_previous_trading_day(
+                today
+            )
+        }
+
+
+    # ======================================================
+    # Before Market Open
+    # ======================================================
+
+    if current_time < EGX_OPEN_TIME:
+
+        return {
+            "status": "PRE_MARKET",
+            "today": today,
+            "expected_date": get_previous_trading_day(
+                today
+            )
+        }
+
+
+    # ======================================================
+    # During Market
+    # ======================================================
+
+    if (
+        current_time >= EGX_OPEN_TIME
+        and current_time <= EGX_CLOSE_TIME
+    ):
+
+        return {
+            "status": "OPEN",
+            "today": today,
+            "expected_date": today
+        }
+
+
+    # ======================================================
+    # After Market Close
+    # ======================================================
+
+    return {
+        "status": "POST_MARKET",
+        "today": today,
+        "expected_date": today
+    }
+
+
+# ==========================================================
+# Validate Yahoo Market Timestamp
+# ==========================================================
+
+def validate_market_freshness(
+    market_datetime
+):
+
+    try:
+
+        session = get_market_session_status()
+
+        market_date = (
+            market_datetime.date()
+        )
+
+        market_status = session[
+            "status"
+        ]
+
+        expected_date = session[
+            "expected_date"
+        ]
+
+        # ======================================================
+        # OPEN MARKET
+        #
+        # During EGX session:
+        # Yahoo price must belong to today's session.
+        # ======================================================
+
+        if market_status == "OPEN":
+
+            if market_date != expected_date:
+
+                return (
+                    False,
+                    "STALE_SESSION"
+                )
+
+            return (
+                True,
+                "FRESH_SESSION"
+            )
+
+
+        # ======================================================
+        # POST MARKET
+        #
+        # After closing:
+        # Today's closing/latest price is expected.
+        # ======================================================
+
+        if market_status == "POST_MARKET":
+
+            if market_date == expected_date:
+
+                return (
+                    True,
+                    "FRESH_CLOSED_SESSION"
+                )
+
+            # If Yahoo has not updated yet,
+            # allow the most recent valid trading session
+            # rather than rejecting everything.
+
+            previous_date = (
+                get_previous_trading_day(
+                    expected_date
+                )
+            )
+
+            if market_date == previous_date:
+
+                return (
+                    True,
+                    "LAST_VALID_SESSION"
+                )
+
+            return (
+                False,
+                "STALE_SESSION"
+            )
+
+
+        # ======================================================
+        # PRE MARKET
+        #
+        # Before EGX opens:
+        # There cannot be a new EGX session price yet.
+        #
+        # Therefore the latest valid previous session
+        # is accepted.
+        # ======================================================
+
+        if market_status == "PRE_MARKET":
+
+            if market_date == expected_date:
+
+                return (
+                    True,
+                    "PRE_MARKET_LAST_SESSION"
+                )
+
+            previous_date = (
+                get_previous_trading_day(
+                    expected_date
+                )
+            )
+
+            if market_date == previous_date:
+
+                return (
+                    True,
+                    "PRE_MARKET_LAST_SESSION"
+                )
+
+            return (
+                False,
+                "STALE_PRE_MARKET_PRICE"
+            )
+
+
+        # ======================================================
+        # Friday / Saturday
+        #
+        # Accept the most recent trading session.
+        # ======================================================
+
+        if market_status == "CLOSED_NON_TRADING_DAY":
+
+            if market_date == expected_date:
+
+                return (
+                    True,
+                    "LAST_TRADING_SESSION"
+                )
+
+            previous_date = (
+                get_previous_trading_day(
+                    expected_date
+                )
+            )
+
+            if market_date == previous_date:
+
+                return (
+                    True,
+                    "LAST_TRADING_SESSION"
+                )
+
+            return (
+                False,
+                "STALE_NON_TRADING_DAY"
+            )
+
+
+        return (
+            False,
+            "UNKNOWN_SESSION"
+        )
+
+
+    except Exception as e:
+
+        print(
+            f"⚠️ Freshness validation error: {e}"
+        )
+
+        return (
+            False,
+            "VALIDATION_ERROR"
+        )
 
 
 # ==========================================================
@@ -189,28 +502,28 @@ def get_stock_data(symbol):
             tz=CAIRO_TZ
         )
 
-        market_date = (
-            market_datetime.date()
-        )
 
         cairo_now = datetime.now(
             CAIRO_TZ
         )
 
-        cairo_today = (
-            cairo_now.date()
+
+        # ======================================================
+        # Session-Aware Freshness Check
+        # ======================================================
+
+        freshness_ok, price_status = (
+            validate_market_freshness(
+                market_datetime
+            )
         )
 
 
-        # ======================================================
-        # Freshness Check
-        # ======================================================
-
-        if market_date != cairo_today:
+        if not freshness_ok:
 
             print(
                 f"⛔ {symbol} → "
-                f"STALE SESSION"
+                f"{price_status}"
             )
 
             print(
@@ -219,16 +532,19 @@ def get_stock_data(symbol):
             )
 
             print(
-                f"   Cairo current date: "
-                f"{cairo_today}"
+                f"   Cairo current time: "
+                f"{cairo_now.strftime('%Y-%m-%d %H:%M:%S')}"
             )
 
             print(
-                f"   Current Yahoo price: "
+                f"   Yahoo price: "
                 f"{regular_market_price:.2f}"
             )
 
-            return None
+            continue_status = False
+
+            if not continue_status:
+                return None
 
 
         # ======================================================
@@ -337,34 +653,35 @@ def get_stock_data(symbol):
 
         # ======================================================
         # Store Yahoo Current Market Data
-        #
-        # IMPORTANT:
-        # لا نعدل df["Close"]
-        #
-        # Close يظل آخر Daily Close تاريخي.
-        #
-        # السعر الحالي يتم تخزينه منفصلاً داخل attrs.
         # ======================================================
 
         df.attrs[
             "regular_market_price"
         ] = regular_market_price
 
+
         df.attrs[
             "regular_market_time"
         ] = regular_market_time
+
 
         df.attrs[
             "regular_market_datetime"
         ] = market_datetime
 
+
         df.attrs[
             "price_status"
-        ] = "fresh"
+        ] = price_status
+
+
+        df.attrs[
+            "historical_close"
+        ] = historical_close
 
 
         # ======================================================
-        # Display Data Difference
+        # Display Price Information
         # ======================================================
 
         print(
@@ -372,6 +689,7 @@ def get_stock_data(symbol):
             f"Yahoo Current Price: "
             f"{regular_market_price:.2f}"
         )
+
 
         print(
             f"📊 {symbol} → "
@@ -401,6 +719,13 @@ def get_stock_data(symbol):
             f"🕐 {symbol} → "
             f"Market Time: "
             f"{market_datetime.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+
+
+        print(
+            f"🛡️ {symbol} → "
+            f"Price Status: "
+            f"{price_status}"
         )
 
 
@@ -621,7 +946,8 @@ def scan_market():
         # Calculate Technical Indicators
         #
         # IMPORTANT:
-        # كل المؤشرات يتم حسابها من Daily Historical Data.
+        # المؤشرات تُحسب أولاً باستخدام
+        # Daily Historical Data.
         # ======================================================
 
         df = calculate_indicators(
@@ -640,10 +966,7 @@ def scan_market():
 
 
         # ======================================================
-        # Validate Current Yahoo Market Price
-        #
-        # لا نغير Close.
-        # strategy.py سيقرأ السعر الحالي من attrs.
+        # Get Current Yahoo Market Price
         # ======================================================
 
         current_market_price = (
@@ -666,33 +989,46 @@ def scan_market():
             continue
 
 
-        regular_market_datetime = (
-            df.attrs.get(
-                "regular_market_datetime"
-            )
+        # ======================================================
+        # Save Historical Close
+        # ======================================================
+
+        historical_close = float(
+            df["Close"].iloc[-1]
         )
 
 
-        if regular_market_datetime is None:
+        # ======================================================
+        # IMPORTANT PRICE FIX
+        #
+        # Strategy.py expects the latest Close
+        # to represent the current price.
+        #
+        # Therefore:
+        #
+        # 1. Indicators are calculated first.
+        # 2. Historical Close is saved.
+        # 3. ONLY the latest Close is replaced
+        #    with Yahoo regularMarketPrice.
+        #
+        # We do NOT recalculate indicators.
+        #
+        # This means:
+        #
+        # Indicators = historical daily data
+        #
+        # Current price = latest Yahoo price
+        #
+        # ==========================================================
 
-            print(
-                f"⚠️ {symbol} "
-                f"→ Missing market timestamp"
-            )
-
-            continue
+        df.loc[
+            df.index[-1],
+            "Close"
+        ] = current_market_price
 
 
         # ======================================================
         # Evaluate Complete Strategy
-        #
-        # Strategy uses:
-        #
-        # Historical Daily Data
-        # +
-        # Current Yahoo Market Price
-        #
-        # without modifying historical Close.
         # ======================================================
 
         analysis = evaluate_stock_strategy(
@@ -730,22 +1066,32 @@ def scan_market():
         )
 
 
-        analysis[
-            "market_datetime"
-        ] = (
-            regular_market_datetime
-            .strftime(
-                "%Y-%m-%d %H:%M:%S"
+        regular_market_datetime = (
+            df.attrs.get(
+                "regular_market_datetime"
             )
         )
+
+
+        if regular_market_datetime is not None:
+
+            analysis[
+                "market_datetime"
+            ] = regular_market_datetime.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+        else:
+
+            analysis[
+                "market_datetime"
+            ] = "N/A"
 
 
         analysis[
             "historical_close"
         ] = round(
-            float(
-                df["Close"].iloc[-1]
-            ),
+            historical_close,
             2
         )
 
@@ -753,9 +1099,7 @@ def scan_market():
         analysis[
             "current_market_price"
         ] = round(
-            float(
-                current_market_price
-            ),
+            current_market_price,
             2
         )
 
@@ -787,7 +1131,7 @@ def scan_market():
                 f"✅ Opportunity found: "
                 f"{symbol} "
                 f"Score={score} "
-                f"Price={current_market_price:.2f}"
+                f"CurrentPrice={current_market_price:.2f}"
             )
 
 
