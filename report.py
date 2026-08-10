@@ -16,6 +16,57 @@ bot = telebot.TeleBot(
 
 
 # ==========================================================
+# Price Freshness Label Mapping
+#
+# القيم دي هي بالظبط اللي بيرجعها scanner.py من
+# validate_market_freshness(). لو السهم وصل للتقرير
+# أصلاً معناه freshness_ok=True، يعني القيم اللي ممكن
+# تظهر هنا هي فقط الحالات المقبولة:
+#
+# FRESH_SESSION           -> سعر لحظي من جلسة اليوم
+# FRESH_CLOSED_SESSION    -> سعر إغلاق اليوم الحالي
+# LAST_VALID_SESSION      -> آخر جلسة متاحة (Yahoo لسه ما حدثش)
+# PRE_MARKET_LAST_SESSION -> آخر جلسة قبل فتح السوق النهاردة
+# LAST_TRADING_SESSION    -> آخر جلسة تداول (عطلة نهاية أسبوع)
+#
+# الحالات الأخرى (STALE_*, VALIDATION_ERROR, UNKNOWN_SESSION)
+# بترفض من get_stock_data() نفسها ومتوصلش للتقرير أصلاً.
+# ==========================================================
+
+PRICE_STATUS_LABELS = {
+
+    "FRESH_SESSION": (
+        "🟢 *السعر لحظي من جلسة اليوم الحالية*"
+    ),
+
+    "FRESH_CLOSED_SESSION": (
+        "🟢 *سعر إغلاق اليوم الحالي*"
+    ),
+
+    "LAST_VALID_SESSION": (
+        "🟡 *آخر سعر متاح - Yahoo لسه ما حدثش "
+        "لجلسة اليوم*"
+    ),
+
+    "PRE_MARKET_LAST_SESSION": (
+        "🟡 *سعر آخر جلسة - السوق لسه ما فتحش*"
+    ),
+
+    "LAST_TRADING_SESSION": (
+        "🟡 *سعر آخر جلسة تداول - عطلة نهاية الأسبوع*"
+    ),
+}
+
+
+def get_freshness_message(price_status):
+
+    return PRICE_STATUS_LABELS.get(
+        price_status,
+        "⚪ *حالة السعر غير معروفة - راجع يدوياً*"
+    )
+
+
+# ==========================================================
 # Send Scanner Report
 # ==========================================================
 
@@ -48,8 +99,7 @@ def send_scanner_report(opportunities):
         current_message = (
             "🏆 *تقرير التحليل الذكي للسوق المصري EGX*\n\n"
             "📈 *الاستراتيجية: التوقعات المستقبلية (شهر + شهرين)*\n"
-            "🎯 *الهدف: اختيار السهم + توقيت الدخول*\n"
-            "☪️ *بعد فلتر التوافق الشرعي والسيولة*\n\n"
+            "🎯 *الهدف: اختيار السهم + توقيت الدخول*\n\n"
         )
 
 
@@ -98,7 +148,7 @@ def send_scanner_report(opportunities):
 
             price_status = item.get(
                 "price_status",
-                "غير متوفر"
+                "unknown"
             )
 
             price_source = item.get(
@@ -362,26 +412,12 @@ def send_scanner_report(opportunities):
 
 
             # ======================================================
-            # Price Freshness Interpretation
+            # Price Freshness Interpretation (FIXED)
             # ======================================================
 
-            if price_status == "fresh":
-
-                freshness_message = (
-                    "🟢 *السعر حديث*"
-                )
-
-            elif price_status == "stale_session":
-
-                freshness_message = (
-                    "🔴 *السعر من جلسة سابقة*"
-                )
-
-            else:
-
-                freshness_message = (
-                    "🟡 *حالة السعر غير مؤكدة*"
-                )
+            freshness_message = get_freshness_message(
+                price_status
+            )
 
 
             # ======================================================
@@ -630,4 +666,4 @@ def send_scanner_report(opportunities):
 
         print(
             f"❌ Error sending report: {e}"
-                )
+            )
