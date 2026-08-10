@@ -55,15 +55,51 @@ PRICE_STATUS_LABELS = {
     "LAST_TRADING_SESSION": (
         "🟡 *سعر آخر جلسة تداول - عطلة نهاية الأسبوع*"
     ),
+
+    "EOD_CLOSE_FRESH": (
+        "🟡 *سعر إغلاق آخر جلسة مكتملة (لا يوجد سعر "
+        "لحظي مجاني متاح من المصدر حالياً)*"
+    ),
+
+    "EOD_CLOSE_LAST_VALID": (
+        "🟡 *سعر إغلاق جلسة سابقة - لسه ما تحدثش "
+        "لجلسة اليوم*"
+    ),
+
+    "STALE_DATA_USED": (
+        "🔴 *تنبيه: السعر ده مش لحظي ومش من جلسة قريبة* — "
+        "استخدمه بحذر شديد"
+    ),
 }
 
 
-def get_freshness_message(price_status):
+def get_freshness_message(price_status, market_datetime=None):
 
-    return PRICE_STATUS_LABELS.get(
+    base_message = PRICE_STATUS_LABELS.get(
         price_status,
         "⚪ *حالة السعر غير معروفة - راجع يدوياً*"
     )
+
+    # ======================================================
+    # لو السعر مش موثوق فيه (STALE_DATA_USED)، بنضيف تاريخ
+    # السعر الحقيقي جوه نفس رسالة التحذير عشان يبقى واضح
+    # بالظبط إمتى آخر مرة اتحدث السعر ده، بدل ما يكون
+    # تصنيف عام بس.
+    # ======================================================
+
+    if (
+        price_status == "STALE_DATA_USED"
+        and market_datetime
+        and market_datetime != "غير متوفر"
+    ):
+
+        return (
+            f"{base_message}\n"
+            f"📅 *تاريخ آخر سعر متاح فعلياً:* "
+            f"`{market_datetime}`"
+        )
+
+    return base_message
 
 
 # ==========================================================
@@ -416,7 +452,8 @@ def send_scanner_report(opportunities):
             # ======================================================
 
             freshness_message = get_freshness_message(
-                price_status
+                price_status,
+                market_datetime
             )
 
 
@@ -666,4 +703,4 @@ def send_scanner_report(opportunities):
 
         print(
             f"❌ Error sending report: {e}"
-            )
+        )
