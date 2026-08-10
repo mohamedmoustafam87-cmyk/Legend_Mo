@@ -1,4 +1,4 @@
-name: Test Investing Price
+name: Test Investing Internal API
 
 on:
 
@@ -25,6 +25,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests
 
-      - name: Test Investing
+      - name: Test Investing Internal API
         run: |
-          python test_investing.py
+          python test_investing_stream.py
