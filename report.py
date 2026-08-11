@@ -16,93 +16,6 @@ bot = telebot.TeleBot(
 
 
 # ==========================================================
-# Price Freshness Label Mapping
-#
-# القيم دي هي بالظبط اللي بيرجعها scanner.py من
-# validate_market_freshness(). لو السهم وصل للتقرير
-# أصلاً معناه freshness_ok=True، يعني القيم اللي ممكن
-# تظهر هنا هي فقط الحالات المقبولة:
-#
-# FRESH_SESSION           -> سعر لحظي من جلسة اليوم
-# FRESH_CLOSED_SESSION    -> سعر إغلاق اليوم الحالي
-# LAST_VALID_SESSION      -> آخر جلسة متاحة (Yahoo لسه ما حدثش)
-# PRE_MARKET_LAST_SESSION -> آخر جلسة قبل فتح السوق النهاردة
-# LAST_TRADING_SESSION    -> آخر جلسة تداول (عطلة نهاية أسبوع)
-#
-# الحالات الأخرى (STALE_*, VALIDATION_ERROR, UNKNOWN_SESSION)
-# بترفض من get_stock_data() نفسها ومتوصلش للتقرير أصلاً.
-# ==========================================================
-
-PRICE_STATUS_LABELS = {
-
-    "FRESH_SESSION": (
-        "🟢 *السعر لحظي من جلسة اليوم الحالية*"
-    ),
-
-    "FRESH_CLOSED_SESSION": (
-        "🟢 *سعر إغلاق اليوم الحالي*"
-    ),
-
-    "LAST_VALID_SESSION": (
-        "🟡 *آخر سعر متاح - Yahoo لسه ما حدثش "
-        "لجلسة اليوم*"
-    ),
-
-    "PRE_MARKET_LAST_SESSION": (
-        "🟡 *سعر آخر جلسة - السوق لسه ما فتحش*"
-    ),
-
-    "LAST_TRADING_SESSION": (
-        "🟡 *سعر آخر جلسة تداول - عطلة نهاية الأسبوع*"
-    ),
-
-    "EOD_CLOSE_FRESH": (
-        "🟡 *سعر إغلاق آخر جلسة مكتملة (لا يوجد سعر "
-        "لحظي مجاني متاح من المصدر حالياً)*"
-    ),
-
-    "EOD_CLOSE_LAST_VALID": (
-        "🟡 *سعر إغلاق جلسة سابقة - لسه ما تحدثش "
-        "لجلسة اليوم*"
-    ),
-
-    "STALE_DATA_USED": (
-        "🔴 *تنبيه: السعر ده مش لحظي ومش من جلسة قريبة* — "
-        "استخدمه بحذر شديد"
-    ),
-}
-
-
-def get_freshness_message(price_status, market_datetime=None):
-
-    base_message = PRICE_STATUS_LABELS.get(
-        price_status,
-        "⚪ *حالة السعر غير معروفة - راجع يدوياً*"
-    )
-
-    # ======================================================
-    # لو السعر مش موثوق فيه (STALE_DATA_USED)، بنضيف تاريخ
-    # السعر الحقيقي جوه نفس رسالة التحذير عشان يبقى واضح
-    # بالظبط إمتى آخر مرة اتحدث السعر ده، بدل ما يكون
-    # تصنيف عام بس.
-    # ======================================================
-
-    if (
-        price_status == "STALE_DATA_USED"
-        and market_datetime
-        and market_datetime != "غير متوفر"
-    ):
-
-        return (
-            f"{base_message}\n"
-            f"📅 *تاريخ آخر سعر متاح فعلياً:* "
-            f"`{market_datetime}`"
-        )
-
-    return base_message
-
-
-# ==========================================================
 # Send Scanner Report
 # ==========================================================
 
@@ -135,7 +48,8 @@ def send_scanner_report(opportunities):
         current_message = (
             "🏆 *تقرير التحليل الذكي للسوق المصري EGX*\n\n"
             "📈 *الاستراتيجية: التوقعات المستقبلية (شهر + شهرين)*\n"
-            "🎯 *الهدف: اختيار السهم + توقيت الدخول*\n\n"
+            "🎯 *الهدف: اختيار السهم + توقيت الدخول*\n"
+            "☪️ *بعد فلتر التوافق الشرعي والسيولة*\n\n"
         )
 
 
@@ -160,41 +74,11 @@ def send_scanner_report(opportunities):
                 )
             )
 
-
-            # ======================================================
-            # Current Price
-            # ======================================================
-
             price = float(
                 item.get(
-                    "current_market_price",
-                    item.get(
-                        "price",
-                        0
-                    )
-                )
-            )
-
-            historical_close = float(
-                item.get(
-                    "historical_close",
+                    "price",
                     0
                 )
-            )
-
-            price_status = item.get(
-                "price_status",
-                "unknown"
-            )
-
-            price_source = item.get(
-                "price_source",
-                "غير متوفر"
-            )
-
-            market_datetime = item.get(
-                "market_datetime",
-                "غير متوفر"
             )
 
 
@@ -448,16 +332,6 @@ def send_scanner_report(opportunities):
 
 
             # ======================================================
-            # Price Freshness Interpretation (FIXED)
-            # ======================================================
-
-            freshness_message = get_freshness_message(
-                price_status,
-                market_datetime
-            )
-
-
-            # ======================================================
             # Stock Message
             # ======================================================
 
@@ -480,14 +354,10 @@ def send_scanner_report(opportunities):
 
                 f"📈 *التوقعات المستقبلية:*\n"
 
-                f"• الشهر القادم: "
-                f"`{forecast_1m_score}/100`\n"
-
+                f"• الشهر القادم: `{forecast_1m_score}/100`\n"
                 f"  {forecast_1m_status}\n"
 
-                f"• الشهرين القادمين: "
-                f"`{forecast_2m_score}/100`\n"
-
+                f"• الشهرين القادمين: `{forecast_2m_score}/100`\n"
                 f"  {forecast_2m_status}\n"
 
                 f"• الحالة العامة: "
@@ -495,22 +365,11 @@ def send_scanner_report(opportunities):
 
 
                 # --------------------------------------------------
-                # Current Market Price
+                # Current Price
                 # --------------------------------------------------
 
                 f"💵 *السعر الحالي:* "
-                f"`{price:.2f}` ج.م\n"
-
-                f"📅 *آخر إغلاق يومي:* "
-                f"`{historical_close:.2f}` ج.م\n"
-
-                f"🕐 *آخر تحديث للسعر:* "
-                f"`{market_datetime}`\n"
-
-                f"📡 *مصدر السعر:* "
-                f"`{price_source}`\n"
-
-                f"{freshness_message}\n\n"
+                f"`{price:.2f}` ج.م\n\n"
 
 
                 # --------------------------------------------------
@@ -703,4 +562,4 @@ def send_scanner_report(opportunities):
 
         print(
             f"❌ Error sending report: {e}"
-        )
+                )
