@@ -428,7 +428,7 @@ def scan_market():
 
 
     # ==========================================================
-    # Sort Opportunities
+    # Sort and Filter Top 5 Opportunities Only
     # ==========================================================
 
     opportunities.sort(
@@ -438,6 +438,8 @@ def scan_market():
         ),
         reverse=True
     )
+
+    top_opportunities = opportunities[:5]
 
 
     # ==========================================================
@@ -463,8 +465,8 @@ def scan_market():
     )
 
     print(
-        f"🎯 Final Opportunities: "
-        f"{len(opportunities)}"
+        f"🎯 Final Opportunities (Top 5): "
+        f"{len(top_opportunities)}"
     )
 
     print(
@@ -472,4 +474,4 @@ def scan_market():
     )
 
 
-    return opportunities
+    return top_opportunities
