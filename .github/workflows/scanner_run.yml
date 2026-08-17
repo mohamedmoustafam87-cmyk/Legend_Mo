@@ -1,29 +1,23 @@
-name: EGX Bot Run - Multi Schedule
+name: EGX Bot Run - Summer Time Fixed
 
 on:
   schedule:
-
-    # 10:30 صباحاً بتوقيت مصر
-    # UTC+3
+    # 1. بعد افتتاح الجلسة بنصف ساعة (10:30 صباحاً بتوقيت مصر الصيفي = 7:30 UTC)
     - cron: '30 7 * * 0-4'
 
-    # 12:00 ظهراً بتوقيت مصر
+    # 2. منتصف الجلسة (12:00 ظهراً بتوقيت مصر الصيفي = 9:00 UTC)
     - cron: '0 9 * * 0-4'
 
-    # 2:30 ظهراً بتوقيت مصر
-    - cron: '30 11 * * 0-4'
+    # 3. بعد نهاية الجلسة بنصف ساعة (3:00 عصراً بتوقيت مصر الصيفي = 12:00 UTC)
+    - cron: '0 12 * * 0-4'
 
   workflow_dispatch:
 
 
 jobs:
-
   run-bot:
-
     runs-on: ubuntu-latest
-
     steps:
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -41,5 +35,6 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
+          TZ: "Africa/Cairo"  # إجبار الخادم على العمل بتوقيت القاهرة الرسمي مباشرة
         run: |
           python main.py
