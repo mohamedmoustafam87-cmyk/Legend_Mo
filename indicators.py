@@ -367,9 +367,6 @@ def calculate_indicators(df):
 
     # ==========================================================
     # Support / Resistance
-    #
-    # استخدام shift(1) مهم جدًا حتى لا نعتبر سعر اليوم
-    # جزءًا من المقاومة التي نقيس اختراقها اليوم.
     # ==========================================================
 
     df["Resistance_20"] = (
@@ -436,10 +433,7 @@ def calculate_indicators(df):
     ) * 100
 
     # ==========================================================
-    # Trend Slope - EMA50
-    #
-    # يساعد strategy.py على معرفة هل الاتجاه المتوسط
-    # يتحسن أم يتراجع.
+    # Trend Slope - EMA50 & MA200
     # ==========================================================
 
     df["EMA50_Slope_10D"] = (
@@ -450,12 +444,6 @@ def calculate_indicators(df):
         /
         df["EMA_50"].shift(10)
     ) * 100
-
-    # ==========================================================
-    # Trend Slope - MA200
-    #
-    # يساعد في قياس استمرارية الاتجاه طويل المدى.
-    # ==========================================================
 
     df["MA200_Slope_20D"] = (
         (
@@ -484,10 +472,6 @@ def calculate_indicators(df):
 
 # ==========================================================
 # Candlestick Analysis
-#
-# مهم: بتتنادى من scanner.py قبل ما يتم استبدال آخر Close
-# بالسعر الحي، عشان الشمعة المحللة تكون حقيقية بالكامل
-# (Open/High/Low/Close كلهم من نفس الجلسة التاريخية).
 # ==========================================================
 
 def analyze_candlesticks(df):
@@ -499,10 +483,6 @@ def analyze_candlesticks(df):
 
     last = df.iloc[-1]
     prev = df.iloc[-2]
-
-    # ==========================================================
-    # Current Candle
-    # ==========================================================
 
     body = abs(
         last["Close"] -
@@ -535,59 +515,32 @@ def analyze_candlesticks(df):
         )
     )
 
-    # ==========================================================
-    # Hammer
-    # ==========================================================
-
+    # 1. شمعة المطرقة الإيجابية
     if (
         body > 0
         and lower_shadow >= 2 * body
         and upper_shadow <= body * 0.5
         and last["Close"] > last["Open"]
     ):
+        reasons.append("🔨 شمعة Hammer إيجابية (دعم من القاع)")
 
-        reasons.append(
-            "🔨 شمعة Hammer إيجابية"
-        )
+    # 2. الابتلاع الشرائي
+    prev_red = (prev["Close"] < prev["Open"])
+    current_green = (last["Close"] > last["Open"])
 
-    # ==========================================================
-    # Bullish Engulfing
-    # ==========================================================
-
-    prev_red = (
-        prev["Close"] <
-        prev["Open"]
-    )
-
-    current_green = (
-        last["Close"] >
-        last["Open"]
-    )
-
-    bullish_engulfing = (
+    if (
         prev_red
         and current_green
         and last["Open"] <= prev["Close"]
         and last["Close"] >= prev["Open"]
-    )
+    ):
+        reasons.append("🟢 Bullish Engulfing (سيطرة للمشترين)")
 
-    if bullish_engulfing:
-
-        reasons.append(
-            "🟢 Bullish Engulfing"
-        )
-
-    # ==========================================================
-    # Strong Bullish Candle
-    # ==========================================================
-
+    # 3. شمعة صاعدة قوية بشرط ألا تكون مبالغاً فيها بشكل يسبب تصحيحاً حاداً
     if (
         body / total_range >= 0.70
         and current_green
     ):
-
-        reasons.append(
-            "💪 شمعة صاعدة قوية"
-        )
+        reasons.append("💪 شمعة صاعدة قوية ومتزنة")
 
     return reasons
