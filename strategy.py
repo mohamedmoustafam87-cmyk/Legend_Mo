@@ -1,4 +1,4 @@
-from config import MIN_SCORE_THRESHOLD
+from config import MIN_SCORE_THRESHOLD, MAX_ALLOWABLE_RSI
 from risk import calculate_risk_management
 from indicators import analyze_candlesticks
 
@@ -91,7 +91,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
         )
 
         # ==========================================================
-        # Validation
+        # Validation & Strict RSI Overbought Filter (Anti-Correction)
         # ==========================================================
 
         if (
@@ -103,6 +103,10 @@ def evaluate_stock_strategy(df, ticker_symbol):
             or resistance <= 0
             or support <= 0
         ):
+            return None
+
+        # فلترة قاسية لمنع التشبع الشرائي والدخول في قمم متصححة
+        if rsi > MAX_ALLOWABLE_RSI:
             return None
 
         # ==========================================================
@@ -304,16 +308,12 @@ def evaluate_stock_strategy(df, ticker_symbol):
                 f"⚠️ RSI ضعيف نسبيًا ({rsi:.1f})"
             )
 
-        elif rsi > 70:
-
-            reasons.append(
-                f"⚠️ RSI مرتفع جدًا ({rsi:.1f})"
-            )
-
         elif rsi < 40:
 
+            score += 5
+
             reasons.append(
-                f"⚠️ RSI منخفض ({rsi:.1f})"
+                f"⚠️ RSI في مناطق التجميع ({rsi:.1f})"
             )
 
         if bullish_macd_cross:
@@ -497,45 +497,30 @@ def evaluate_stock_strategy(df, ticker_symbol):
             trend_status = "🟡 Setup متوسط ويحتاج متابعة"
 
         # ==========================================================
-        # Entry Analysis (Flexible for Momentum Stocks)
+        # Realistic Entry Analysis (Preventing Unrealistic Distant Prices)
         # ==========================================================
+        # جعل منطقة الدخول قريبة جداً من السعر الحالي لعدم فوات الفرصة وعدم الانتظار الوهمي
+
+        max_allowed_drop = close_price * 0.985  # نطاق قريب جدا لا يتجاوز 1.5% هبوطا كمنطقة دعم قريبة
+        realistic_support = max(support, max_allowed_drop)
+
+        ideal_entry = round(realistic_support, 2)
+        entry_high = round(close_price, 2)
 
         overextended = (
-            distance_from_ema > 30
-            and forecast_1m_score < 60
+            distance_from_ema > 25
         )
 
         too_far_below_ema = (
             distance_from_ema < -10
         )
 
-        entry_candidates = [
-            ema20,
-            ema50,
-            support
-        ]
-
-        entry_candidates = [
-            x
-            for x in entry_candidates
-            if x > 0
-        ]
-
-        if entry_candidates:
-            ideal_entry = min(entry_candidates)
-            entry_high = max(entry_candidates)
-        else:
-            ideal_entry = close_price
-            entry_high = close_price
-
         if overextended:
             entry_status = "🟡 WAIT - السعر ممتد فوق EMA20"
         elif too_far_below_ema:
-            entry_status = "🟡 WAIT - السعر أسفل مناطق الدعم"
-        elif breakout or forecast_1m_score >= 60:
-            entry_status = "🟢 BUY - Strong Momentum / Breakout"
+            entry_status = "🟡 WAIT - السعر بعيد عن المتوسطات"
         else:
-            entry_status = "🟢 BUY ZONE / WATCH"
+            entry_status = "🟢 BUY - سعر الدخول قريب ومرتبط بالزخم الحالي"
 
         # ==========================================================
         # Risk Management
@@ -558,11 +543,11 @@ def evaluate_stock_strategy(df, ticker_symbol):
             return None
 
         # ==========================================================
-        # Final Recommendation (Flexible to Always Show Opportunities)
+        # Final Recommendation
         # ==========================================================
 
         if score < MIN_SCORE_THRESHOLD:
-            return None  # استبعاد ما دون الحد الأدنى الجديد (60) لضمان ظهور الباقي فقط
+            return None
         elif score >= 80 and forecast_1m_score >= 70:
             recommendation = "🔥 شراء قوي جداً"
         elif score >= 70:
@@ -588,8 +573,8 @@ def evaluate_stock_strategy(df, ticker_symbol):
             "forecast_2m_status": forecast_2m_status,
             "entry_status": entry_status,
             "distance_from_ema": round(distance_from_ema, 2),
-            "ideal_entry": round(ideal_entry, 2),
-            "entry_high": round(entry_high, 2),
+            "ideal_entry": ideal_entry,
+            "entry_high": entry_high,
             "ma200_slope": round(ma200_slope, 2),
             "ema50_slope": round(ema50_slope, 2),
             "atr": round(atr, 2),
