@@ -42,14 +42,19 @@ def send_scanner_report(opportunities):
 
             return
 
+        # ==========================================================
+        # Limit to Top 5 Opportunities Only (Flitered & Strongest)
+        # ==========================================================
+
+        opportunities = sorted(opportunities, key=lambda x: x.get("score", 0), reverse=True)[:5]
 
         messages = []
 
         current_message = (
-            "🏆 *تقرير التحليل الذكي للسوق المصري EGX*\n\n"
+            "🏆 *تقرير التحليل الذكي للسوق المصري EGX (أقوى 5 فرص)*\n\n"
             "📈 *الاستراتيجية: التوقعات المستقبلية (شهر + شهرين)*\n"
-            "🎯 *الهدف: اختيار السهم + توقيت الدخول*\n"
-            "☪️ *بعد فلتر التوافق الشرعي والسيولة*\n\n"
+            "🎯 *الهدف: اختيار السهم + توقيت الدخول المبرمج*\n"
+            "☪️ *بعد فلتر التوافق الشرعي والسيولة والتشبع الشرائي*\n\n"
         )
 
 
@@ -303,7 +308,7 @@ def send_scanner_report(opportunities):
 
 
             # ======================================================
-            # Score Interpretation
+            # Score Interpretation (Fixed Logic for Accuracy)
             # ======================================================
 
             if score >= 90:
@@ -312,22 +317,22 @@ def send_scanner_report(opportunities):
                     "🔥 تقييم استثنائي"
                 )
 
-            elif score >= 85:
+            elif score >= 80:
 
                 score_message = (
-                    "🟢 تقييم قوي"
+                    "🟢 تقييم قوي جداً"
                 )
 
-            elif score >= 75:
+            elif score >= 65:
 
                 score_message = (
-                    "🟡 تقييم جيد"
+                    "🟡 تقييم جيد ومناسب"
                 )
 
             else:
 
                 score_message = (
-                    "⚪ تقييم ضعيف"
+                    "⚪ تقييم متحفظ"
                 )
 
 
@@ -562,4 +567,4 @@ def send_scanner_report(opportunities):
 
         print(
             f"❌ Error sending report: {e}"
-                )
+        )
