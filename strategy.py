@@ -497,11 +497,10 @@ def evaluate_stock_strategy(df, ticker_symbol):
             trend_status = "🟡 Setup متوسط ويحتاج متابعة"
 
         # ==========================================================
-        # Realistic Entry Analysis (Preventing Unrealistic Distant Prices)
+        # Realistic Entry Analysis
         # ==========================================================
-        # جعل منطقة الدخول قريبة جداً من السعر الحالي لعدم فوات الفرصة وعدم الانتظار الوهمي
 
-        max_allowed_drop = close_price * 0.985  # نطاق قريب جدا لا يتجاوز 1.5% هبوطا كمنطقة دعم قريبة
+        max_allowed_drop = close_price * 0.985
         realistic_support = max(support, max_allowed_drop)
 
         ideal_entry = round(realistic_support, 2)
@@ -541,6 +540,22 @@ def evaluate_stock_strategy(df, ticker_symbol):
 
         if stop_loss >= close_price:
             return None
+
+        # ==========================================================
+        # Expected Timeframe Calculation for TP1 & TP2 (Based on ATR)
+        # ==========================================================
+
+        distance_tp1 = risk["tp1"] - close_price
+        distance_tp2 = risk["tp2"] - close_price
+
+        daily_speed = atr if atr > 0 else (close_price * 0.02)
+        effective_speed = daily_speed * 1.2 if adx > 25 else daily_speed
+
+        sessions_tp1 = max(1, round(distance_tp1 / effective_speed))
+        sessions_tp2 = max(1, round(distance_tp2 / effective_speed))
+
+        days_tp1_text = f"تقريباً {sessions_tp1} جلسات ({max(1, sessions_tp1 // 5)} أسبوع)" if sessions_tp1 >= 5 else f"تقريباً {sessions_tp1} جلسات تداول"
+        days_tp2_text = f"تقريباً {sessions_tp2} جلسات ({max(1, sessions_tp2 // 5)} أسابيع)" if sessions_tp2 >= 5 else f"تقريباً {sessions_tp2} جلسات تداول"
 
         # ==========================================================
         # Final Recommendation
@@ -588,7 +603,9 @@ def evaluate_stock_strategy(df, ticker_symbol):
             "actual_risk": risk["actual_risk"],
             "risk_per_share": risk["risk_per_share"],
             "tp1": risk["tp1"],
+            "days_tp1_text": days_tp1_text,
             "tp2": risk["tp2"],
+            "days_tp2_text": days_tp2_text,
             "rr1": risk["rr1"],
             "rr2": risk["rr2"],
             "reasons": reasons
