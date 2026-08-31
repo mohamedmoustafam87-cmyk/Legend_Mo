@@ -14,7 +14,7 @@ MY_PORTFOLIO = {
 
 def analyze_user_portfolio():
     """
-    فحص وتحليل أسهم محفظة المستخدم الحالية وإعطاء نصيحة ذكية لكل سهم مع حماية كاملة ضد الأخطاء.
+    فحص وتحليل أسهم محفظة المستخدم الحالية بناءً على أحدث إغلاق مسجل وإعطاء نصيحة ذكية.
     """
     portfolio_results = []
 
@@ -27,10 +27,10 @@ def analyze_user_portfolio():
                 print(f"⚠️ تحذير: لم يتم جلب بيانات كافية للسهم {ticker}")
                 continue
 
+            # استخدام الشمعة الأخيرة (آخر إغلاق جلسة مسجل رسمياً)
             latest = df.iloc[-1]
             close_price = float(latest["Close"])
             
-            # التعامل مع أي مؤشرات ناقصة لتجنب توقف الكود
             ema20 = float(latest["EMA_20"]) if "EMA_20" in df.columns and not pd.isna(latest["EMA_20"]) else close_price
             ma200 = float(latest["MA_200"]) if "MA_200" in df.columns and not pd.isna(latest["MA_200"]) else close_price
             rsi = float(latest["RSI_14"]) if "RSI_14" in df.columns and not pd.isna(latest["RSI_14"]) else 50.0
@@ -41,7 +41,7 @@ def analyze_user_portfolio():
             shares = info["shares"]
             buy_price = info["buy_price"]
 
-            # حساب المكسب أو الخسارة
+            # حساب المكسب أو الخسارة بدقة
             pnl_egp = (close_price - buy_price) * shares
             pnl_pct = ((close_price - buy_price) / buy_price) * 100
             current_value = close_price * shares
