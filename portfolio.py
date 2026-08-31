@@ -1,0 +1,73 @@
+import pandas as pd
+from scanner import get_stock_data  # لاستدعاء بيانات السهم بنفس طريقة البوت
+
+# قائمة محفظتك الخاصة مع الكميات وأسعار الشراء (تكلفة الشراء)
+MY_PORTFOLIO = {
+    "EFIH": {"shares": 586, "buy_price": 24.39},
+    "NIPH": {"shares": 20, "buy_price": 395.58},
+    "MILS": {"shares": 14, "buy_price": 219.54},
+    "PHAR": {"shares": 22, "buy_price": 132.74},
+    "ZMID": {"shares": 290, "buy_price": 8.55},
+    "SPIN": {"shares": 125, "buy_price": 19.80},
+    "SCEM": {"shares": 20, "buy_price": 100.01},
+}
+
+def analyze_user_portfolio():
+    """
+    فحص وتحليل أسهم محفظة المستخدم الحالية وإعطاء نصيحة ذكية لكل سهم.
+    """
+    portfolio_results = []
+
+    for ticker, info in MY_PORTFOLIO.items():
+        symbol_full = f"{ticker}.CA"
+        df = get_stock_data(symbol_full)
+
+        if df is None or df.empty or len(df) < 50:
+            continue
+
+        latest = df.iloc[-1]
+        close_price = float(latest["Close"])
+        ema20 = float(latest["EMA_20"])
+        ma200 = float(latest["MA_200"])
+        rsi = float(latest["RSI_14"])
+        support = float(latest["Support_20"])
+        resistance = float(latest["Resistance_20"])
+        atr = float(latest["ATR"])
+
+        shares = info["shares"]
+        buy_price = info["buy_price"]
+
+        # حساب المكسب أو الخسارة
+        pnl_egp = (close_price - buy_price) * shares
+        pnl_pct = ((close_price - buy_price) / buy_price) * 100
+        current_value = close_price * shares
+
+        # منطق النصيحة الذكية
+        structural_stop = support - (0.5 * atr) if support > 0 else close_price - (2 * atr)
+
+        if close_price <= structural_stop or close_price < ma200 * 0.95:
+            advice = "بيع فوري / وقف خسارة 🔴"
+            reason = "كسر خط الدفاع الرئيسي أو الدعم الهام."
+        elif rsi > 75 or close_price >= resistance * 0.98:
+            advice = "جني أرباح جزئي 💰"
+            reason = "السهم قرب من المقاومة أو ظهر تشبع شرائي."
+        elif close_price > ema20 and ema20 > ma200 and rsi <= 70:
+            advice = "احتفاظ قوي 🔥"
+            reason = "الاتجاه صاعد بقوة والزخم ممتاز."
+        else:
+            advice = "احتفاظ ومراقبة 🟡"
+            reason = "حركة عرضية طبيعية، استمر بالمتابعة."
+
+        portfolio_results.append({
+            "ticker": ticker,
+            "shares": shares,
+            "buy_price": buy_price,
+            "price": round(close_price, 2),
+            "pnl_egp": round(pnl_egp, 2),
+            "pnl_pct": round(pnl_pct, 2),
+            "current_value": round(current_value, 2),
+            "advice": advice,
+            "reason": reason
+        })
+
+    return portfolio_results
