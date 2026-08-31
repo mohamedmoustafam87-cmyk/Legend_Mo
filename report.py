@@ -167,7 +167,7 @@ def send_scanner_report(opportunities):
 
 
             # ======================================================
-            # Risk Management
+            # Risk Management & Timeframes
             # ======================================================
 
             shares = int(
@@ -198,11 +198,21 @@ def send_scanner_report(opportunities):
                 )
             )
 
+            days_tp1_text = item.get(
+                "days_tp1_text",
+                "غير متوفر"
+            )
+
             tp2 = float(
                 item.get(
                     "tp2",
                     0
                 )
+            )
+
+            days_tp2_text = item.get(
+                "days_tp2_text",
+                "غير متوفر"
             )
 
             position_value = float(
@@ -443,18 +453,18 @@ def send_scanner_report(opportunities):
 
 
                 # --------------------------------------------------
-                # Targets
+                # Targets with Expected Timeframes
                 # --------------------------------------------------
 
                 f"🎯 *الهدف الأول TP1:* "
                 f"`{tp1:.2f}` ج.م\n"
-
+                f"⏳ *المدة المتوقعة:* `{days_tp1_text}`\n"
                 f"📈 *Risk / Reward:* "
                 f"`1:{rr1:.2f}`\n\n"
 
                 f"🎯 *الهدف الثاني TP2:* "
                 f"`{tp2:.2f}` ج.م\n"
-
+                f"⏳ *المدة المتوقعة:* `{days_tp2_text}`\n"
                 f"📈 *Risk / Reward:* "
                 f"`1:{rr2:.2f}`\n\n"
 
