@@ -1,20 +1,22 @@
 import pandas as pd
 from scanner import get_stock_data
 
-# قائمة محفظتك الخاصة مع الكميات وأسعار الشراء (تكلفة الشراء)
+# قائمة محفظتك الجديدة المحدثة مع الكميات وأسعار التكلفة
 MY_PORTFOLIO = {
     "EFIH": {"shares": 586, "buy_price": 24.39},
-    "NIPH": {"shares": 20, "buy_price": 395.58},
-    "MILS": {"shares": 14, "buy_price": 219.54},
-    "PHAR": {"shares": 22, "buy_price": 132.74},
-    "ZMID": {"shares": 290, "buy_price": 8.55},
-    "SPIN": {"shares": 125, "buy_price": 19.80},
-    "SCEM": {"shares": 20, "buy_price": 100.01},
+    "NIPH": {"shares": 25, "buy_price": 384.65},
+    "KORA": {"shares": 1250, "buy_price": 5.38},
+    "GTWL": {"shares": 23, "buy_price": 242.66},
+    "MILS": {"shares": 24, "buy_price": 211.08},
+    "CIEB": {"shares": 159, "buy_price": 25.63},
+    "PHAR": {"shares": 32, "buy_price": 130.70},
+    "EGAL": {"shares": 10, "buy_price": 374.64},
+    "MASR": {"shares": 300, "buy_price": 8.55},
 }
 
 def analyze_user_portfolio():
     """
-    فحص وتحليل أسهم محفظة المستخدم الحالية بناءً على أحدث إغلاق مسجل وإعطاء نصيحة ذكية.
+    فحص وتحليل أسهم محفظة المستخدم الجديدة بناءً على أحدث إغلاق مسجل وإعطاء نصيحة ذكية.
     """
     portfolio_results = []
 
@@ -27,7 +29,6 @@ def analyze_user_portfolio():
                 print(f"⚠️ تحذير: لم يتم جلب بيانات كافية للسهم {ticker}")
                 continue
 
-            # استخدام الشمعة الأخيرة (آخر إغلاق جلسة مسجل رسمياً)
             latest = df.iloc[-1]
             close_price = float(latest["Close"])
             
