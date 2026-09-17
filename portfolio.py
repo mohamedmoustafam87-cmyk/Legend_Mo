@@ -3,15 +3,16 @@ from scanner import get_stock_data
 
 # قائمة محفظتك الجديدة المحدثة مع الكميات وأسعار التكلفة
 MY_PORTFOLIO = {
-    "EFIH": {"shares": 586, "buy_price": 24.39},
-    "NIPH": {"shares": 25, "buy_price": 384.65},
-    "KORA": {"shares": 1250, "buy_price": 5.38},
-    "GTWL": {"shares": 23, "buy_price": 242.66},
-    "MILS": {"shares": 24, "buy_price": 211.08},
-    "CIEB": {"shares": 159, "buy_price": 25.63},
-    "PHAR": {"shares": 32, "buy_price": 130.70},
-    "EGAL": {"shares": 10, "buy_price": 374.64},
-    "MASR": {"shares": 300, "buy_price": 8.55},
+    "EFIH": {"shares": 736, "buy_price": 24.11},
+    "NIPH": {"shares": 60, "buy_price": 352.11},
+    "KORA": {"shares": 800, "buy_price": 7.19},
+    "GTWL": {"shares": 62, "buy_price": 241.05},
+    "MILS": {"shares": 44, "buy_price": 207.65},
+    "ACGC": {"shares": 550, "buy_price": 15.05},
+    "SPMD": {"shares": 10000, "buy_price": .52},
+    "EGAL": {"shares": 18, "buy_price": 375.7},
+    "MASR": {"shares": 1104, "buy_price": 8.28},
+    "SIPC": {"shares": 614, "buy_price": 6.51},
 }
 
 def analyze_user_portfolio():
