@@ -1,5 +1,8 @@
 import requests
 import pandas as pd
+import re
+import json
+from datetime import datetime
 
 from config import (
     EGX_STOCKS,
@@ -14,7 +17,7 @@ from strategy import evaluate_stock_strategy
 
 
 # ==========================================================
-# Yahoo Finance API
+# Yahoo Finance
 # ==========================================================
 
 YAHOO_URL = (
@@ -24,10 +27,154 @@ YAHOO_URL = (
 
 
 # ==========================================================
-# Get Stock Data
+# Mubasher
 # ==========================================================
 
-def get_stock_data(symbol):
+MUBASHER_URL = (
+    "https://www.mubasher.info/markets/EGX/stocks/"
+)
+
+
+# ==========================================================
+# Common Headers
+# ==========================================================
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 "
+        "(Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 "
+        "(KHTML, like Gecko) "
+        "Chrome/120.0 Safari/537.36"
+    ),
+    "Accept": (
+        "text/html,application/xhtml+xml,"
+        "application/xml;q=0.9,image/avif,"
+        "image/webp,*/*;q=0.8"
+    ),
+    "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
+    "Connection": "keep-alive",
+}
+
+
+# ==========================================================
+# Get Current Price From Mubasher
+# ==========================================================
+
+def get_mubasher_current_price(symbol):
+
+    ticker = (
+        symbol
+        .replace(".CA", "")
+        .strip()
+        .upper()
+    )
+
+    url = f"{MUBASHER_URL}{ticker}"
+
+    try:
+
+        response = requests.get(
+            url,
+            headers=HEADERS,
+            timeout=10
+        )
+
+        response.raise_for_status()
+
+        html = response.text
+
+        # --------------------------------------------------
+        # Try to find structured JSON values
+        # --------------------------------------------------
+
+        patterns = [
+
+            r'"lastPrice"\s*:\s*"?([0-9]+(?:\.[0-9]+)?)"?',
+
+            r'"last_price"\s*:\s*"?([0-9]+(?:\.[0-9]+)?)"?',
+
+            r'"last"\s*:\s*"?([0-9]+(?:\.[0-9]+)?)"?',
+
+            r'"Last"\s*:\s*"?([0-9]+(?:\.[0-9]+)?)"?',
+
+            r'"currentPrice"\s*:\s*"?([0-9]+(?:\.[0-9]+)?)"?',
+
+            r'"current_price"\s*:\s*"?([0-9]+(?:\.[0-9]+)?)"?',
+
+            r'"price"\s*:\s*"?([0-9]+(?:\.[0-9]+)?)"?',
+
+        ]
+
+        for pattern in patterns:
+
+            matches = re.findall(
+                pattern,
+                html,
+                flags=re.IGNORECASE
+            )
+
+            if matches:
+
+                # --------------------------------------------------
+                # Take the first valid positive price
+                # --------------------------------------------------
+
+                for value in matches:
+
+                    try:
+
+                        price = float(value)
+
+                        if price > 0:
+
+                            return price
+
+                    except (TypeError, ValueError):
+
+                        continue
+
+        # --------------------------------------------------
+        # No price found
+        # --------------------------------------------------
+
+        print(
+            f"❌ فشل الوصول إلى Mubasher لـ {ticker}"
+        )
+
+        return None
+
+    except requests.exceptions.Timeout:
+
+        print(
+            f"❌ فشل الوصول إلى Mubasher لـ {ticker} "
+            f"(Timeout)"
+        )
+
+        return None
+
+    except requests.exceptions.RequestException as e:
+
+        print(
+            f"❌ فشل الوصول إلى Mubasher لـ {ticker}: {e}"
+        )
+
+        return None
+
+    except Exception as e:
+
+        print(
+            f"❌ فشل قراءة بيانات Mubasher لـ {ticker}: {e}"
+        )
+
+        return None
+
+
+# ==========================================================
+# Get Historical Data From Yahoo Finance
+# ==========================================================
+
+def get_yahoo_stock_data(symbol):
 
     try:
 
@@ -39,19 +186,9 @@ def get_stock_data(symbol):
             f"&includeAdjustedClose=true"
         )
 
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 "
-                "(Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 "
-                "(KHTML, like Gecko) "
-                "Chrome/120.0 Safari/537.36"
-            )
-        }
-
         response = requests.get(
             url,
-            headers=headers,
+            headers=HEADERS,
             timeout=15
         )
 
@@ -167,7 +304,7 @@ def get_stock_data(symbol):
     except requests.exceptions.Timeout:
 
         print(
-            f"⏱️ Timeout while fetching {symbol}"
+            f"⏱️ Timeout while fetching Yahoo {symbol}"
         )
 
         return None
@@ -175,20 +312,7 @@ def get_stock_data(symbol):
     except requests.exceptions.RequestException as e:
 
         print(
-            f"🌐 Network error for {symbol}: {e}"
-        )
-
-        return None
-
-    except (
-        KeyError,
-        IndexError,
-        TypeError,
-        ValueError
-    ) as e:
-
-        print(
-            f"📊 Data parsing error for {symbol}: {e}"
+            f"🌐 Yahoo network error for {symbol}: {e}"
         )
 
         return None
@@ -196,10 +320,171 @@ def get_stock_data(symbol):
     except Exception as e:
 
         print(
-            f"❌ Unexpected error for {symbol}: {e}"
+            f"❌ Yahoo error for {symbol}: {e}"
         )
 
         return None
+
+
+# ==========================================================
+# Add Current Session Price
+# ==========================================================
+
+def add_current_mubasher_price(
+    df,
+    symbol
+):
+
+    try:
+
+        current_price = (
+            get_mubasher_current_price(
+                symbol
+            )
+        )
+
+        # --------------------------------------------------
+        # Mubasher failed
+        # --------------------------------------------------
+
+        if current_price is None:
+
+            print(
+                f"⚠️ {symbol}: "
+                f"فشل الوصول إلى Mubasher "
+                f"→ تم استخدام Yahoo Finance"
+            )
+
+            return df
+
+        # --------------------------------------------------
+        # Current date
+        # --------------------------------------------------
+
+        today = pd.Timestamp.now().normalize()
+
+        # --------------------------------------------------
+        # Check whether Yahoo already has today's session
+        # --------------------------------------------------
+
+        last_date = (
+            pd.Timestamp(
+                df.index[-1]
+            ).normalize()
+        )
+
+        # --------------------------------------------------
+        # Yahoo already contains today's row
+        # --------------------------------------------------
+
+        if last_date == today:
+
+            df.iloc[
+                -1,
+                df.columns.get_loc("Close")
+            ] = current_price
+
+            print(
+                f"✅ {symbol} | "
+                f"Mubasher = {current_price:.2f} "
+                f"| Updated today's Close"
+            )
+
+            return df
+
+        # --------------------------------------------------
+        # Yahoo does not have today's row
+        # Create a new intraday/current-session row.
+        # --------------------------------------------------
+
+        previous_close = float(
+            df.iloc[-1]["Close"]
+        )
+
+        new_row = pd.DataFrame(
+            {
+                "Open": [previous_close],
+
+                "High": [
+                    max(
+                        previous_close,
+                        current_price
+                    )
+                ],
+
+                "Low": [
+                    min(
+                        previous_close,
+                        current_price
+                    )
+                ],
+
+                "Close": [current_price],
+
+                "Volume": [0]
+            },
+            index=[today]
+        )
+
+        df = pd.concat(
+            [
+                df,
+                new_row
+            ]
+        )
+
+        print(
+            f"✅ {symbol} | "
+            f"Mubasher current price = "
+            f"{current_price:.2f}"
+        )
+
+        return df
+
+    except Exception as e:
+
+        print(
+            f"❌ Error updating Mubasher price "
+            f"for {symbol}: {e}"
+        )
+
+        print(
+            f"⚠️ {symbol}: "
+            f"فشل الوصول إلى Mubasher "
+            f"→ تم استخدام Yahoo Finance"
+        )
+
+        return df
+
+
+# ==========================================================
+# Get Stock Data
+# ==========================================================
+
+def get_stock_data(symbol):
+
+    # ------------------------------------------------------
+    # 1. Historical data from Yahoo
+    # ------------------------------------------------------
+
+    df = get_yahoo_stock_data(
+        symbol
+    )
+
+    if df is None or df.empty:
+
+        return None
+
+    # ------------------------------------------------------
+    # 2. Current session price from Mubasher
+    # ------------------------------------------------------
+
+    df = add_current_mubasher_price(
+        df,
+        symbol
+    )
+
+    return df
 
 
 # ==========================================================
@@ -211,12 +496,17 @@ def passes_liquidity_filter(df):
     try:
 
         if df is None or df.empty:
+
             return False
 
         if len(df) < 20:
+
             return False
 
-        recent = df.tail(20).copy()
+        recent = (
+            df.tail(20)
+            .copy()
+        )
 
         average_volume = (
             recent["Volume"]
@@ -278,7 +568,8 @@ def scan_market():
     )
 
     print(
-        f"📊 EGX Universe: {total_stocks} stocks"
+        f"📊 EGX Universe: "
+        f"{total_stocks} stocks"
     )
 
     print(
@@ -290,10 +581,9 @@ def scan_market():
         "====================================\n"
     )
 
-
-    # ==========================================================
+    # ======================================================
     # Scan Every EGX Stock
-    # ==========================================================
+    # ======================================================
 
     for index, symbol in enumerate(
         EGX_STOCKS,
@@ -305,24 +595,23 @@ def scan_market():
             f"📊 Scanning {symbol}..."
         )
 
-
-        # ======================================================
+        # ==================================================
         # Sharia Filter
-        # ======================================================
+        # ==================================================
 
         if symbol not in sharia_stocks:
 
             print(
                 f"☪️ {symbol} "
-                f"→ غير موجود في قائمة التوافق الشرعي"
+                f"→ غير موجود في قائمة "
+                f"التوافق الشرعي"
             )
 
             continue
 
-
-        # ======================================================
+        # ==================================================
         # Get Market Data
-        # ======================================================
+        # ==================================================
 
         df = get_stock_data(
             symbol
@@ -336,10 +625,9 @@ def scan_market():
 
             continue
 
-
-        # ======================================================
+        # ==================================================
         # Liquidity Filter
-        # ======================================================
+        # ==================================================
 
         if not passes_liquidity_filter(
             df
@@ -352,10 +640,9 @@ def scan_market():
 
             continue
 
-
-        # ======================================================
+        # ==================================================
         # Calculate Technical Indicators
-        # ======================================================
+        # ==================================================
 
         df = calculate_indicators(
             df
@@ -370,10 +657,9 @@ def scan_market():
 
             continue
 
-
-        # ======================================================
+        # ==================================================
         # Evaluate Complete Strategy
-        # ======================================================
+        # ==================================================
 
         analysis = evaluate_stock_strategy(
             df,
@@ -389,10 +675,9 @@ def scan_market():
 
             continue
 
-
-        # ======================================================
+        # ==================================================
         # Score
-        # ======================================================
+        # ==================================================
 
         score = int(
             analysis.get(
@@ -401,10 +686,9 @@ def scan_market():
             )
         )
 
-
-        # ======================================================
+        # ==================================================
         # Minimum Score Filter
-        # ======================================================
+        # ==================================================
 
         if score >= MIN_SCORE_THRESHOLD:
 
@@ -426,52 +710,13 @@ def scan_market():
                 f"(below threshold)"
             )
 
-
-    # ==========================================================
+    # ======================================================
     # Sort and Filter Top 5 Opportunities Only
-    # ==========================================================
+    # ======================================================
 
     opportunities.sort(
         key=lambda x: x.get(
             "score",
             0
         ),
-        reverse=True
-    )
-
-    top_opportunities = opportunities[:5]
-
-
-    # ==========================================================
-    # Final Report
-    # ==========================================================
-
-    print(
-        "\n===================================="
-    )
-
-    print(
-        "🏆 FULL EGX SCAN COMPLETED"
-    )
-
-    print(
-        f"📊 Universe: "
-        f"{total_stocks} stocks"
-    )
-
-    print(
-        f"☪️ Sharia Universe: "
-        f"{len(sharia_stocks)} stocks"
-    )
-
-    print(
-        f"🎯 Final Opportunities (Top 5): "
-        f"{len(top_opportunities)}"
-    )
-
-    print(
-        "====================================\n"
-    )
-
-
-    return top_opportunities
+        reverse
