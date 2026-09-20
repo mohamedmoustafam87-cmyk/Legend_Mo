@@ -22,38 +22,37 @@ YAHOO_URL = (
     "v8/finance/chart/"
 )
 
-MUBASHER_URL = "https://www.mubasher.info/api/1/stocks"
+MUBASHER_MARKET_API = "https://www.mubasher.info/api/1/market/stocks?country=eg"
 
 
 # ==========================================================
-# Get Stock Data (Hybrid: Mubasher First, Yahoo Fallback)
+# Get Stock Data (Hybrid: Mubasher Realtime First, Yahoo Fallback)
 # ==========================================================
 
 def get_stock_data(symbol):
     clean_symbol = symbol.replace(".CA", "")
+    data_source = "Yahoo Finance"
 
     # ----------------------------------------------------------
-    # محاولة 1: السحب من موقع مباشر (Mubasher)
+    # محاولة 1: جلب البيانات اللحظية من مباشر (Mubasher API)
     # ----------------------------------------------------------
+    mubasher_price = None
     try:
-        # محاولة جلب بيانات تاريخية أو ملخص من مباشر للبورصة المصرية
-        mubasher_api = f"https://www.mubasher.info/api/1/market/stocks?country=eg"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         }
-        resp = requests.get(mubasher_api, headers=headers, timeout=10)
+        resp = requests.get(MUBASHER_MARKET_API, headers=headers, timeout=8)
         if resp.status_code == 200:
-            stocks_data = resp.json().get("data", [])
-            for s in stocks_data:
-                if s.get("symbol") == clean_symbol or s.get("ric") == clean_symbol:
-                    # مباشر يعطينا البيانات اللحظية، ولكن التحليل الفني يحتاج شمعات تاريخية (DataFrame)
-                    # لذلك إذا تطلب الأمر تاريخاً كاملاً نعتمد على ياهو، أو نستخدم مباشر للتأكيد اللحظي.
-                    pass
+            stocks_list = resp.json().get("data", [])
+            for stock in stocks_list:
+                if stock.get("symbol") == clean_symbol or stock.get("ric") == clean_symbol:
+                    mubasher_price = float(stock.get("lastPrice", 0))
+                    break
     except Exception:
-        pass  # في حال فشل مباشر، ننتقل تلقائياً لياهو فاينانس
+        pass
 
     # ----------------------------------------------------------
-    # المحاولة الأساسية للبيانات التاريخية: Yahoo Finance مع تحديد المصدر
+    # المحاولة الأساسية للبيانات التاريخية والشموع: Yahoo Finance
     # ----------------------------------------------------------
     try:
         url = (
@@ -95,7 +94,7 @@ def get_stock_data(symbol):
 
         if error:
             print(f"Yahoo error for {symbol}: {error}")
-            return None
+            return None, "Yahoo Finance"
 
         results = chart.get(
             "result"
@@ -103,7 +102,7 @@ def get_stock_data(symbol):
 
         if not results:
             print(f"No Yahoo data available for {symbol}")
-            return None
+            return None, "Yahoo Finance"
 
         result = results[0]
 
@@ -122,7 +121,7 @@ def get_stock_data(symbol):
 
         if not timestamps or not quotes:
             print(f"Invalid Yahoo data for {symbol}")
-            return None
+            return None, "Yahoo Finance"
 
         quote = quotes[0]
 
@@ -160,24 +159,31 @@ def get_stock_data(symbol):
             inplace=True
         )
 
+        # إذا نجحنا في جلب السعر اللحظي المحدث من مباشر، نقوم بتحديث سعر الإغلاق لآخر شمعة
+        if mubasher_price and mubasher_price > 0:
+            df.iloc[-1, df.columns.get_loc("Close")] = mubasher_price
+            data_source = "مباشر (Mubasher Realtime)"
+            print(f"🚀 [مصدر البيانات]: السهم {symbol} تم تحديث سعره لحظياً من (مباشر)")
+        else:
+            data_source = "Yahoo Finance (إغلاق سابق)"
+            print(f"📈 [مصدر البيانات]: الأسعار للسهم {symbol} من (Yahoo Finance)")
+
         if len(df) < 220:
             print(
                 f"Not enough data for {symbol}: "
                 f"{len(df)} rows"
             )
-            return None
+            return None, data_source
 
-        # طباعة مصدر البيانات لتعم الفائدة والتأكيد
-        print(f"📈 [مصدر البيانات]: الأسعار للسهم {symbol} تم جلبها بنجاح من (Yahoo Finance)")
-        return df
+        return df, data_source
 
     except requests.exceptions.Timeout:
         print(f"⏱️ Timeout while fetching {symbol}")
-        return None
+        return None, "Yahoo Finance"
 
     except requests.exceptions.RequestException as e:
         print(f"🌐 Network error for {symbol}: {e}")
-        return None
+        return None, "Yahoo Finance"
 
     except (
         KeyError,
@@ -186,11 +192,11 @@ def get_stock_data(symbol):
         ValueError
     ) as e:
         print(f"📊 Data parsing error for {symbol}: {e}")
-        return None
+        return None, "Yahoo Finance"
 
     except Exception as e:
         print(f"❌ Unexpected error for {symbol}: {e}")
-        return None
+        return None, "Yahoo Finance"
 
 
 # ==========================================================
@@ -309,10 +315,10 @@ def scan_market():
 
 
         # ======================================================
-        # Get Market Data
+        # Get Market Data & Source
         # ======================================================
 
-        df = get_stock_data(
+        df, data_source = get_stock_data(
             symbol
         )
 
@@ -376,6 +382,9 @@ def scan_market():
             )
 
             continue
+
+        # حقن مصدر البيانات في نتيجة التحليل ليظهر في التقرير
+        analysis["data_source"] = data_source
 
 
         # ======================================================
