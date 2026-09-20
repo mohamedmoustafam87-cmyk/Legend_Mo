@@ -71,7 +71,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
         prev_macd = float(prev["MACD"])
 
         prev_signal = float(
-            prev["MACD_signal"]
+            latest["MACD_signal"]
         )
 
         atr = float(latest["ATR"])
@@ -558,6 +558,31 @@ def evaluate_stock_strategy(df, ticker_symbol):
         days_tp2_text = f"تقريباً {sessions_tp2} جلسات ({max(1, sessions_tp2 // 5)} أسابيع)" if sessions_tp2 >= 5 else f"تقريباً {sessions_tp2} جلسات تداول"
 
         # ==========================================================
+        # Smart Exit Strategy & Timing (توقيت وإشارات الخروج)
+        # ==========================================================
+        
+        exit_signals = []
+        
+        # 1. مراقبة التشبع الشرائي (منطقة جني الأرباح المبكرة)
+        if rsi >= 75:
+            exit_signals.append("⚠️ RSI ممتد (>75) - يفضل جني أرباح جزئي")
+        elif rsi >= 80:
+            exit_signals.append("🚨 تشبع شرائي خطير (>80) - ينصح بالخروج وجني الأرباح فوراً")
+            
+        # 2. مراقبة كسر الاتجاه القريب أو المتوسطات
+        if close_price < ema20:
+            exit_signals.append("🔴 السعر كسر متوسط EMA20 هبوطاً - إشارة خروج/حماية أرباح")
+            
+        # 3. الاقتراب من المقاومة الكبرى
+        if close_price >= (resistance * 0.98):
+            exit_signals.append("🎯 السعر يقترب بشدة من المقاومة الرئيسية - راقب جني الأرباح")
+            
+        if not exit_signals:
+            exit_strategy_text = "🟢 الوضع آمن - استمر في الاحتفاظ حتى تحقيق الأهداف (TP1 / TP2)"
+        else:
+            exit_strategy_text = " | ".join(exit_signals)
+
+        # ==========================================================
         # Final Recommendation
         # ==========================================================
 
@@ -608,7 +633,8 @@ def evaluate_stock_strategy(df, ticker_symbol):
             "days_tp2_text": days_tp2_text,
             "rr1": risk["rr1"],
             "rr2": risk["rr2"],
-            "reasons": reasons
+            "reasons": reasons,
+            "exit_strategy": exit_strategy_text  # <-- أضفنا استراتيجية الخروج هنا لتظهر في التقارير
         }
 
     except (
