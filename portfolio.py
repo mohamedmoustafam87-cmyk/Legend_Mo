@@ -1,7 +1,7 @@
 import pandas as pd
 from scanner import get_stock_data
 
-# قائمة محفظتك الجديدة المحدثة مع الكميات وأسعار التكلفة
+# قائمة محفظتك المحدثة مع الكميات وأسعار التكلفة
 MY_PORTFOLIO = {
     "EFIH": {"shares": 736, "buy_price": 24.11},
     "NIPH": {"shares": 60, "buy_price": 352.11},
@@ -9,7 +9,7 @@ MY_PORTFOLIO = {
     "GTWL": {"shares": 62, "buy_price": 241.05},
     "MILS": {"shares": 44, "buy_price": 207.65},
     "ACGC": {"shares": 550, "buy_price": 15.05},
-    "SPMD": {"shares": 10000, "buy_price": .52},
+    "SPMD": {"shares": 10000, "buy_price": 0.52},
     "EGAL": {"shares": 18, "buy_price": 375.7},
     "MASR": {"shares": 1104, "buy_price": 8.28},
     "SIPC": {"shares": 614, "buy_price": 6.51},
@@ -48,15 +48,15 @@ def analyze_user_portfolio():
             pnl_pct = ((close_price - buy_price) / buy_price) * 100
             current_value = close_price * shares
 
-            # منطق النصيحة الذكية
+            # منطق النصيحة الذكية واستراتيجية الخروج
             structural_stop = support - (0.5 * atr) if support > 0 else close_price - (2 * atr)
 
             if close_price <= structural_stop or close_price < ma200 * 0.95:
                 advice = "بيع فوري / وقف خسارة 🔴"
                 reason = "كسر خط الدفاع الرئيسي أو الدعم الهام."
-            elif rsi > 75 or close_price >= resistance * 0.98:
+            elif rsi >= 75 or close_price >= resistance * 0.98:
                 advice = "جني أرباح جزئي 💰"
-                reason = "السهم قرب من المقاومة أو ظهر تشبع شرائي."
+                reason = f"تشبع شرائي (RSI: {rsi:.1f}) أو اقتراب من المقاومة."
             elif close_price > ema20 and ema20 > ma200 and rsi <= 70:
                 advice = "احتفاظ قوي 🔥"
                 reason = "الاتجاه صاعد بقوة والزخم ممتاز."
