@@ -53,7 +53,7 @@ def send_scanner_report(opportunities):
         current_message = (
             "🏆 *تقرير التحليل الذكي للسوق المصري EGX (أقوى 5 فرص)*\n\n"
             "📈 *الاستراتيجية: التوقعات المستقبلية (شهر + شهرين)*\n"
-            "🎯 *الهدف: اختيار السهم + توقيت الدخول المبرمج*\n"
+            "🎯 *الهدف: اختيار السهم + توقيت الدخول المبرمج + إدارة الخروج*\n"
             "☪️ *بعد فلتر التوافق الشرعي والسيولة والتشبع الشرائي*\n\n"
         )
 
@@ -252,7 +252,7 @@ def send_scanner_report(opportunities):
 
 
             # ======================================================
-            # Technical Data
+            # Technical Data & Exit Strategy
             # ======================================================
 
             volume_ratio = float(
@@ -281,6 +281,11 @@ def send_scanner_report(opportunities):
                     "atr",
                     0
                 )
+            )
+
+            exit_strategy = item.get(
+                "exit_strategy",
+                "🟢 الوضع آمن - استمر في الاحتفاظ"
             )
 
 
@@ -470,7 +475,7 @@ def send_scanner_report(opportunities):
 
 
                 # --------------------------------------------------
-                # Support / Resistance
+                # Support / Resistance & Exit Strategy
                 # --------------------------------------------------
 
                 f"📍 *الدعم:* "
@@ -478,6 +483,9 @@ def send_scanner_report(opportunities):
 
                 f"🚧 *المقاومة:* "
                 f"`{resistance:.2f}` ج.م\n\n"
+
+                f"🚪 *خطة وإشارات الخروج:* \n"
+                f"{exit_strategy}\n\n"
 
 
                 # --------------------------------------------------
@@ -569,7 +577,7 @@ def send_scanner_report(opportunities):
 
         print(
             "✅ تم إرسال تقرير التحليل "
-            "والتوقعات والدخول وإدارة المخاطر بنجاح."
+            "والتوقعات والدخول وإدارة المخاطر وخطة الخروج بنجاح."
         )
 
 
