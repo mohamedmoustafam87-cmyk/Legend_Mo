@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 from scanner import scan_market
@@ -36,6 +37,21 @@ def is_scheduled_report_time():
             return True
 
     return False
+
+
+# ==========================================================
+# Check If This Run Was Triggered Manually
+# ==========================================================
+
+def is_manual_trigger():
+    """
+    GitHub Actions بيحط اسم الحدث في GITHUB_EVENT_NAME.
+    لو التشغيل يدوي (زرار Run workflow) قيمتها 'workflow_dispatch'.
+    لو مش موجودة (تشغيل محلي على جهازك مثلاً) بنعتبره يدوي برضه.
+    """
+
+    event_name = os.getenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+    return event_name == "workflow_dispatch"
 
 
 def send_portfolio_report():
@@ -84,14 +100,20 @@ def main():
     )
 
     # ==========================================================
-    # 0. Skip Entirely If Not a Scheduled Report Time
+    # 0. Skip Only If Automatic (Scheduled) Run AND Not a
+    #    Scheduled Report Time. Manual runs always execute.
     # ==========================================================
 
-    if not is_scheduled_report_time():
+    if not is_manual_trigger() and not is_scheduled_report_time():
         print(
-            "⏭️ مش وقت إرسال تقرير مجدول - تخطي الـ scan والإرسال."
+            "⏭️ تشغيل تلقائي خارج مواعيد الإرسال المحددة - تخطي الـ scan والإرسال."
         )
         return
+
+    if is_manual_trigger():
+        print(
+            "▶️ تشغيل يدوي (workflow_dispatch) - جاري التنفيذ بغض النظر عن التوقيت."
+        )
 
     try:
 
