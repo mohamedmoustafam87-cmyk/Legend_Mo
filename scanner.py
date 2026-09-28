@@ -26,14 +26,10 @@ MUBASHER_MARKET_API = "https://www.mubasher.info/api/1/market/stocks?country=eg"
 
 
 # ==========================================================
-# جلب كل أسعار مباشر مرة واحدة (بدل ما تتكرر لكل سهم)
+# جلب كل أسعار مباشر مرة واحدة
 # ==========================================================
 
 def fetch_mubasher_prices():
-    """
-    يرجع dictionary: {symbol: last_price}
-    ده بيتنادى مرة واحدة بس في بداية scan_market()
-    """
     prices = {}
 
     try:
@@ -88,14 +84,10 @@ def get_stock_data(symbol, mubasher_prices=None):
     clean_symbol = symbol.replace(".CA", "")
     data_source = "Yahoo Finance"
 
-    # سعر مباشر من الـ dictionary اللي اتجاب مرة واحدة بره اللوب
     mubasher_price = None
     if mubasher_prices:
         mubasher_price = mubasher_prices.get(clean_symbol)
 
-    # ----------------------------------------------------------
-    # المحاولة الأساسية للبيانات التاريخية والشموع: Yahoo Finance
-    # ----------------------------------------------------------
     try:
         url = (
             f"{YAHOO_URL}{symbol}"
@@ -136,7 +128,7 @@ def get_stock_data(symbol, mubasher_prices=None):
 
         if error:
             print(f"Yahoo error for {symbol}: {error}")
-            return None, "Yahoo Finance"
+            return None
 
         results = chart.get(
             "result"
@@ -144,7 +136,7 @@ def get_stock_data(symbol, mubasher_prices=None):
 
         if not results:
             print(f"No Yahoo data available for {symbol}")
-            return None, "Yahoo Finance"
+            return None
 
         result = results[0]
 
@@ -163,7 +155,7 @@ def get_stock_data(symbol, mubasher_prices=None):
 
         if not timestamps or not quotes:
             print(f"Invalid Yahoo data for {symbol}")
-            return None, "Yahoo Finance"
+            return None
 
         quote = quotes[0]
 
@@ -201,7 +193,6 @@ def get_stock_data(symbol, mubasher_prices=None):
             inplace=True
         )
 
-        # إذا نجحنا في جلب السعر اللحظي المحدث من مباشر، نقوم بتحديث سعر الإغلاق لآخر شمعة
         if mubasher_price and mubasher_price > 0:
             df.iloc[-1, df.columns.get_loc("Close")] = mubasher_price
             data_source = "مباشر (Mubasher Realtime - تأخير ~15 دقيقة)"
@@ -215,17 +206,20 @@ def get_stock_data(symbol, mubasher_prices=None):
                 f"Not enough data for {symbol}: "
                 f"{len(df)} rows"
             )
-            return None, data_source
+            return None
 
-        return df, data_source
+        # تخزين مصدر البيانات داخل الـ DataFrame لضمان التوافق وعدم إرجاع Tuple
+        df.attrs["data_source"] = data_source
+
+        return df
 
     except requests.exceptions.Timeout:
         print(f"⏱️ Timeout while fetching {symbol}")
-        return None, "Yahoo Finance"
+        return None
 
     except requests.exceptions.RequestException as e:
         print(f"🌐 Network error for {symbol}: {e}")
-        return None, "Yahoo Finance"
+        return None
 
     except (
         KeyError,
@@ -234,11 +228,11 @@ def get_stock_data(symbol, mubasher_prices=None):
         ValueError
     ) as e:
         print(f"📊 Data parsing error for {symbol}: {e}")
-        return None, "Yahoo Finance"
+        return None
 
     except Exception as e:
         print(f"❌ Unexpected error for {symbol}: {e}")
-        return None, "Yahoo Finance"
+        return None
 
 
 # ==========================================================
@@ -326,13 +320,7 @@ def scan_market():
         "====================================\n"
     )
 
-    # جلب أسعار مباشر مرة واحدة بس لكل السوق قبل بدء اللوب
     mubasher_prices = fetch_mubasher_prices()
-
-
-    # ==========================================================
-    # Scan Every EGX Stock
-    # ==========================================================
 
     for index, symbol in enumerate(
         EGX_STOCKS,
@@ -344,76 +332,45 @@ def scan_market():
             f"📊 Scanning {symbol}..."
         )
 
-
-        # ======================================================
-        # Sharia Filter
-        # ======================================================
-
         if symbol not in sharia_stocks:
-
             print(
                 f"☪️ {symbol} "
                 f"→ غير موجود في قائمة التوافق الشرعي"
             )
-
             continue
 
-
-        # ======================================================
-        # Get Market Data & Source
-        # ======================================================
-
-        df, data_source = get_stock_data(
+        df = get_stock_data(
             symbol,
             mubasher_prices
         )
 
         if df is None or df.empty:
-
             print(
                 f"⚠️ Skipping {symbol}"
             )
-
             continue
 
-
-        # ======================================================
-        # Liquidity Filter
-        # ======================================================
+        data_source = df.attrs.get("data_source", "Yahoo Finance")
 
         if not passes_liquidity_filter(
             df
         ):
-
             print(
                 f"💧 {symbol} "
                 f"→ السيولة أقل من الحد المطلوب"
             )
-
             continue
-
-
-        # ======================================================
-        # Calculate Technical Indicators
-        # ======================================================
 
         df = calculate_indicators(
             df
         )
 
         if df is None or df.empty:
-
             print(
                 f"⚠️ Could not calculate indicators "
                 f"for {symbol}"
             )
-
             continue
-
-
-        # ======================================================
-        # Evaluate Complete Strategy
-        # ======================================================
 
         analysis = evaluate_stock_strategy(
             df,
@@ -421,21 +378,13 @@ def scan_market():
         )
 
         if analysis is None:
-
             print(
                 f"❌ {symbol} "
                 f"→ لا توجد إشارة صالحة"
             )
-
             continue
 
-        # حقن مصدر البيانات في نتيجة التحليل ليظهر في التقرير
         analysis["data_source"] = data_source
-
-
-        # ======================================================
-        # Score
-        # ======================================================
 
         score = int(
             analysis.get(
@@ -443,11 +392,6 @@ def scan_market():
                 0
             )
         )
-
-
-        # ======================================================
-        # Minimum Score Filter
-        # ======================================================
 
         if score >= MIN_SCORE_THRESHOLD:
 
@@ -469,11 +413,6 @@ def scan_market():
                 f"(below threshold)"
             )
 
-
-    # ==========================================================
-    # Sort and Filter Top 5 Opportunities Only
-    # ==========================================================
-
     opportunities.sort(
         key=lambda x: x.get(
             "score",
@@ -483,11 +422,6 @@ def scan_market():
     )
 
     top_opportunities = opportunities[:5]
-
-
-    # ==========================================================
-    # Final Report
-    # ==========================================================
 
     print(
         "\n===================================="
