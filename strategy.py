@@ -519,4 +519,21 @@ def evaluate_stock_strategy(df, ticker_symbol):
         elif too_far_below_ema:
             entry_status = "🟡 WAIT - السعر بعيد عن المتوسطات"
         else:
-            entry_status = "🟢 BUY - سعر الدخول قريب ومرتبط بالزخم الح
+            entry_status = "🟢 BUY - سعر الدخول قريب ومرتبط بالزخم الحالي"
+
+        return {
+            "score": score,
+            "reasons": reasons,
+            "forecast_1m_score": forecast_1m_score,
+            "forecast_1m_status": forecast_1m_status,
+            "forecast_2m_score": forecast_2m_score,
+            "forecast_2m_status": forecast_2m_status,
+            "trend_status": trend_status,
+            "entry_status": entry_status,
+            "ideal_entry": ideal_entry,
+            "entry_high": entry_high
+        }
+
+    except Exception as e:
+        print(f"Error in evaluate_stock_strategy: {e}")
+        return None
