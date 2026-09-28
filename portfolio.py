@@ -1,16 +1,16 @@
 import pandas as pd
-from scanner import get_stock_data
+from scanner import get_stock_data, fetch_mubasher_prices
+from indicators import calculate_indicators
 
 # قائمة محفظتك المحدثة مع الكميات وأسعار التكلفة
 MY_PORTFOLIO = {
     "EFIH": {"shares": 736, "buy_price": 24.11},
-    "NIPH": {"shares": 60, "buy_price": 352.11},
-    "KORA": {"shares": 800, "buy_price": 7.19},
-    "GTWL": {"shares": 62, "buy_price": 241.05},
+    "NIPH": {"shares": 75, "buy_price": 344.14},
+    "KORA": {"shares": 1430, "buy_price": 6.70},
+    "GTWL": {"shares": 72, "buy_price": 236.85},
     "MILS": {"shares": 44, "buy_price": 207.65},
-    "ACGC": {"shares": 550, "buy_price": 15.05},
+    "ACGC": {"shares": 700, "buy_price": 14.785},
     "SPMD": {"shares": 10000, "buy_price": 0.52},
-    "EGAL": {"shares": 18, "buy_price": 375.7},
     "MASR": {"shares": 1104, "buy_price": 8.28},
     "SIPC": {"shares": 614, "buy_price": 6.51},
 }
@@ -21,18 +21,29 @@ def analyze_user_portfolio():
     """
     portfolio_results = []
 
+    # جلب أسعار مباشر مرة واحدة بس لكل أسهم المحفظة (زي ما بنعمل في scan_market)
+    mubasher_prices = fetch_mubasher_prices()
+
     for ticker, info in MY_PORTFOLIO.items():
         try:
             symbol_full = f"{ticker}.CA"
-            df = get_stock_data(symbol_full)
+            df = get_stock_data(symbol_full, mubasher_prices)
 
-            if df is None or df.empty or len(df) < 30:
+            if df is None or df.empty:
                 print(f"⚠️ تحذير: لم يتم جلب بيانات كافية للسهم {ticker}")
+                continue
+
+            # حساب المؤشرات الفنية - كانت مفقودة قبل كده، وده كان بيخلي
+            # كل النصائح ترجع "احتفاظ ومراقبة" دايمًا بسبب fallback على قيم وهمية
+            df = calculate_indicators(df)
+
+            if df is None or df.empty:
+                print(f"⚠️ تحذير: فشل حساب المؤشرات للسهم {ticker}")
                 continue
 
             latest = df.iloc[-1]
             close_price = float(latest["Close"])
-            
+
             ema20 = float(latest["EMA_20"]) if "EMA_20" in df.columns and not pd.isna(latest["EMA_20"]) else close_price
             ma200 = float(latest["MA_200"]) if "MA_200" in df.columns and not pd.isna(latest["MA_200"]) else close_price
             rsi = float(latest["RSI_14"]) if "RSI_14" in df.columns and not pd.isna(latest["RSI_14"]) else 50.0
