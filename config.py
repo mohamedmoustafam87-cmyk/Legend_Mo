@@ -1,4 +1,5 @@
 import os
+from zoneinfo import ZoneInfo
 
 # ==========================================================
 # Telegram Configuration
@@ -121,3 +122,21 @@ ATR_STOP_MULTIPLIER = 2.0
 SUPPORT_ATR_BUFFER = 0.5
 TP1_R_MULTIPLE = 2.0
 TP2_R_MULTIPLE = 3.0
+
+
+# ==========================================================
+# Report Scheduling (بتوقيت القاهرة - يتعامل تلقائيًا مع التوقيت الصيفي)
+# ==========================================================
+
+TIMEZONE = ZoneInfo("Africa/Cairo")
+
+# مواعيد إرسال التقرير (ساعة, دقيقة) بتوقيت القاهرة المحلي
+REPORT_TIMES = [
+    (10, 30),
+    (12, 30),
+    (14, 30),
+    (15, 0),
+]
+
+# هامش السماح بالدقائق - لو الـ workflow اتأخر عن الميعاد المحدد
+REPORT_TIME_TOLERANCE_MINUTES = 5
