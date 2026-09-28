@@ -26,30 +26,72 @@ MUBASHER_MARKET_API = "https://www.mubasher.info/api/1/market/stocks?country=eg"
 
 
 # ==========================================================
-# Get Stock Data (Hybrid: Mubasher Realtime First, Yahoo Fallback)
+# جلب كل أسعار مباشر مرة واحدة (بدل ما تتكرر لكل سهم)
 # ==========================================================
 
-def get_stock_data(symbol):
-    clean_symbol = symbol.replace(".CA", "")
-    data_source = "Yahoo Finance"
+def fetch_mubasher_prices():
+    """
+    يرجع dictionary: {symbol: last_price}
+    ده بيتنادى مرة واحدة بس في بداية scan_market()
+    """
+    prices = {}
 
-    # ----------------------------------------------------------
-    # محاولة 1: جلب البيانات اللحظية من مباشر (Mubasher API)
-    # ----------------------------------------------------------
-    mubasher_price = None
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         }
-        resp = requests.get(MUBASHER_MARKET_API, headers=headers, timeout=8)
+
+        resp = requests.get(
+            MUBASHER_MARKET_API,
+            headers=headers,
+            timeout=10
+        )
+
         if resp.status_code == 200:
             stocks_list = resp.json().get("data", [])
+
             for stock in stocks_list:
-                if stock.get("symbol") == clean_symbol or stock.get("ric") == clean_symbol:
-                    mubasher_price = float(stock.get("lastPrice", 0))
-                    break
-    except Exception:
-        pass
+                symbol_key = stock.get("symbol") or stock.get("ric")
+                last_price = stock.get("lastPrice")
+
+                if symbol_key and last_price:
+                    try:
+                        prices[symbol_key] = float(last_price)
+                    except (TypeError, ValueError):
+                        continue
+
+            print(
+                f"✅ [مباشر] تم جلب {len(prices)} سعر لحظي بنجاح"
+            )
+        else:
+            print(
+                f"⚠️ [مباشر] فشل الطلب - status code: {resp.status_code}"
+            )
+
+    except requests.exceptions.Timeout:
+        print("⏱️ [مباشر] Timeout أثناء جلب أسعار السوق")
+
+    except requests.exceptions.RequestException as e:
+        print(f"🌐 [مباشر] خطأ في الشبكة: {e}")
+
+    except Exception as e:
+        print(f"❌ [مباشر] خطأ غير متوقع: {e}")
+
+    return prices
+
+
+# ==========================================================
+# Get Stock Data (Hybrid: Mubasher Realtime First, Yahoo Fallback)
+# ==========================================================
+
+def get_stock_data(symbol, mubasher_prices=None):
+    clean_symbol = symbol.replace(".CA", "")
+    data_source = "Yahoo Finance"
+
+    # سعر مباشر من الـ dictionary اللي اتجاب مرة واحدة بره اللوب
+    mubasher_price = None
+    if mubasher_prices:
+        mubasher_price = mubasher_prices.get(clean_symbol)
 
     # ----------------------------------------------------------
     # المحاولة الأساسية للبيانات التاريخية والشموع: Yahoo Finance
@@ -162,8 +204,8 @@ def get_stock_data(symbol):
         # إذا نجحنا في جلب السعر اللحظي المحدث من مباشر، نقوم بتحديث سعر الإغلاق لآخر شمعة
         if mubasher_price and mubasher_price > 0:
             df.iloc[-1, df.columns.get_loc("Close")] = mubasher_price
-            data_source = "مباشر (Mubasher Realtime)"
-            print(f"🚀 [مصدر البيانات]: السهم {symbol} تم تحديث سعره لحظياً من (مباشر)")
+            data_source = "مباشر (Mubasher Realtime - تأخير ~15 دقيقة)"
+            print(f"🚀 [مصدر البيانات]: السهم {symbol} تم تحديث سعره من (مباشر)")
         else:
             data_source = "Yahoo Finance (إغلاق سابق)"
             print(f"📈 [مصدر البيانات]: الأسعار للسهم {symbol} من (Yahoo Finance)")
@@ -284,6 +326,9 @@ def scan_market():
         "====================================\n"
     )
 
+    # جلب أسعار مباشر مرة واحدة بس لكل السوق قبل بدء اللوب
+    mubasher_prices = fetch_mubasher_prices()
+
 
     # ==========================================================
     # Scan Every EGX Stock
@@ -319,7 +364,8 @@ def scan_market():
         # ======================================================
 
         df, data_source = get_stock_data(
-            symbol
+            symbol,
+            mubasher_prices
         )
 
         if df is None or df.empty:
