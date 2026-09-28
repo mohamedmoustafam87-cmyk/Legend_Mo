@@ -1,7 +1,41 @@
+from datetime import datetime
+
 from scanner import scan_market
 from report import send_scanner_report, bot
-from config import ADMIN_CHAT_ID
+from config import (
+    ADMIN_CHAT_ID,
+    TIMEZONE,
+    REPORT_TIMES,
+    REPORT_TIME_TOLERANCE_MINUTES
+)
 from portfolio import analyze_user_portfolio
+
+
+# ==========================================================
+# Check If Now Is a Scheduled Report Time (Cairo Local Time)
+# ==========================================================
+
+def is_scheduled_report_time():
+    """
+    بيتحقق إن التوقيت الحالي بتوقيت القاهرة قريب من أحد
+    المواعيد المحددة في REPORT_TIMES، بهامش REPORT_TIME_TOLERANCE_MINUTES.
+    بيتعامل تلقائيًا مع التوقيت الصيفي لأن TIMEZONE = Africa/Cairo.
+    """
+
+    now = datetime.now(TIMEZONE)
+    now_minutes = (now.hour * 60) + now.minute
+
+    for target_hour, target_minute in REPORT_TIMES:
+        target_minutes = (target_hour * 60) + target_minute
+
+        if abs(now_minutes - target_minutes) <= REPORT_TIME_TOLERANCE_MINUTES:
+            print(
+                f"⏰ الوقت الحالي ({now.strftime('%H:%M')}) "
+                f"يطابق الموعد المحدد ({target_hour:02d}:{target_minute:02d}) - جاري التنفيذ"
+            )
+            return True
+
+    return False
 
 
 def send_portfolio_report():
@@ -48,6 +82,16 @@ def main():
     print(
         "🤖 Smart EGX Bot started (Optimized & Portfolio Mode)..."
     )
+
+    # ==========================================================
+    # 0. Skip Entirely If Not a Scheduled Report Time
+    # ==========================================================
+
+    if not is_scheduled_report_time():
+        print(
+            "⏭️ مش وقت إرسال تقرير مجدول - تخطي الـ scan والإرسال."
+        )
+        return
 
     try:
 
