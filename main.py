@@ -1,157 +1,559 @@
-import os
-from datetime import datetime
-
-from scanner import scan_market
-from report import send_scanner_report, bot
-from config import (
-    ADMIN_CHAT_ID,
-    TIMEZONE,
-    REPORT_TIMES,
-    REPORT_TIME_TOLERANCE_MINUTES
-)
-from portfolio import analyze_user_portfolio
+from config import MIN_SCORE_THRESHOLD, MAX_ALLOWABLE_RSI
+from risk import calculate_risk_management
+from indicators import analyze_candlesticks
 
 
-# ==========================================================
-# Check If Now Is a Scheduled Report Time (Cairo Local Time)
-# ==========================================================
-
-def is_scheduled_report_time():
-    """
-    بيتحقق إن التوقيت الحالي بتوقيت القاهرة قريب من أحد
-    المواعيد المحددة في REPORT_TIMES، بهامش REPORT_TIME_TOLERANCE_MINUTES.
-    بيتعامل تلقائيًا مع التوقيت الصيفي لأن TIMEZONE = Africa/Cairo.
-    """
-
-    now = datetime.now(TIMEZONE)
-    now_minutes = (now.hour * 60) + now.minute
-
-    for target_hour, target_minute in REPORT_TIMES:
-        target_minutes = (target_hour * 60) + target_minute
-
-        if abs(now_minutes - target_minutes) <= REPORT_TIME_TOLERANCE_MINUTES:
-            print(
-                f"⏰ الوقت الحالي ({now.strftime('%H:%M')}) "
-                f"يطابق الموعد المحدد ({target_hour:02d}:{target_minute:02d}) - جاري التنفيذ"
-            )
-            return True
-
-    return False
-
-
-# ==========================================================
-# Check If This Run Was Triggered Manually
-# ==========================================================
-
-def is_manual_trigger():
-    """
-    GitHub Actions بيحط اسم الحدث في GITHUB_EVENT_NAME.
-    لو التشغيل يدوي (زرار Run workflow) قيمتها 'workflow_dispatch'.
-    لو مش موجودة (تشغيل محلي على جهازك مثلاً) بنعتبره يدوي برضه.
-    """
-
-    event_name = os.getenv("GITHUB_EVENT_NAME", "workflow_dispatch")
-    return event_name == "workflow_dispatch"
-
-
-def send_portfolio_report():
-    try:
-        results = analyze_user_portfolio()
-        if not results:
-            return
-
-        msg = "💼 *تقرير متابعة محفظتك الخاصة (Portfolio Advisor)*\n\n"
-        
-        total_portfolio_value = 0
-        total_portfolio_pnl = 0
-
-        for item in results:
-            emoji_pnl = "🟢" if item["pnl_pct"] >= 0 else "🔴"
-            total_portfolio_value += item["current_value"]
-            total_portfolio_pnl += item["pnl_egp"]
-
-            msg += (
-                f"📌 *السهم:* `{item['ticker']}`\n"
-                f"📦 *الكمية:* `{item['shares']:,}` | *التكلفة:* `{item['buy_price']:.2f}` ج.م\n"
-                f"💵 *السعر الحالي:* `{item['price']:.2f}` ج.م\n"
-                f"{emoji_pnl} *الربح/الخسارة:* `{item['pnl_egp']:+,.2f}` ج.م (`{item['pnl_pct']:+.2f}%`)\n"
-                f"💡 *النصيحة:* *{item['advice']}*\n"
-                f"📝 *السبب:* {item['reason']}\n"
-                f"━━━━━━━━━━━━━━━━━━\n\n"
-            )
-
-        total_emoji = "🟢" if total_portfolio_pnl >= 0 else "🔴"
-        msg += (
-            f"📊 *إجمالي قيمة المحفظة:* `{total_portfolio_value:,.2f}` ج.م\n"
-            f"{total_emoji} *إجمالي الأرباح/الخسائر:* `{total_portfolio_pnl:+,.2f}` ج.م\n"
-        )
-
-        bot.send_message(ADMIN_CHAT_ID, msg, parse_mode="Markdown")
-        print("✅ تم إرسال تقرير المحفظة بنجاح.")
-
-    except Exception as e:
-        print(f"❌ Error sending portfolio report: {e}")
-
-
-def main():
-
-    print(
-        "🤖 Smart EGX Bot started (Optimized & Portfolio Mode)..."
-    )
-
-    # ==========================================================
-    # 0. Skip Only If Automatic (Scheduled) Run AND Not a
-    #    Scheduled Report Time. Manual runs always execute.
-    # ==========================================================
-
-    if not is_manual_trigger() and not is_scheduled_report_time():
-        print(
-            "⏭️ تشغيل تلقائي خارج مواعيد الإرسال المحددة - تخطي الـ scan والإرسال."
-        )
-        return
-
-    if is_manual_trigger():
-        print(
-            "▶️ تشغيل يدوي (workflow_dispatch) - جاري التنفيذ بغض النظر عن التوقيت."
-        )
+def evaluate_stock_strategy(df, ticker_symbol):
 
     try:
 
         # ==========================================================
-        # 1. Scan Full EGX Market & Get Top 5 Filtered Opportunities
+        # Basic Validation
         # ==========================================================
 
-        opportunities = scan_market()
+        if df is None or len(df) < 220:
+            return None
 
-        print(
-            f"📊 Scan completed successfully. "
-            f"Found top {len(opportunities)} strong opportunities."
+        latest = df.iloc[-1]
+        prev = df.iloc[-2]
+
+        required_columns = [
+            "Close",
+            "MA_200",
+            "EMA_20",
+            "EMA_50",
+            "RSI_14",
+            "ADX",
+            "MACD",
+            "MACD_signal",
+            "ATR",
+            "Volume",
+            "Vol_SMA20",
+            "Resistance_20",
+            "Support_20"
+        ]
+
+        for column in required_columns:
+
+            if column not in df.columns:
+                return None
+
+            if (
+                latest[column] != latest[column]
+                or prev[column] != prev[column]
+            ):
+                return None
+
+        # ==========================================================
+        # Current Values
+        # ==========================================================
+
+        close_price = float(latest["Close"])
+
+        ma200 = float(latest["MA_200"])
+
+        ema20 = float(latest["EMA_20"])
+
+        ema50 = float(latest["EMA_50"])
+
+        rsi = float(latest["RSI_14"])
+
+        adx = float(latest["ADX"])
+
+        prev_adx = float(prev["ADX"])
+
+        macd = float(latest["MACD"])
+
+        macd_signal = float(
+            latest["MACD_signal"]
+        )
+
+        prev_macd = float(prev["MACD"])
+
+        prev_signal = float(
+            latest["MACD_signal"]
+        )
+
+        atr = float(latest["ATR"])
+
+        volume = float(latest["Volume"])
+
+        vol_sma20 = float(
+            latest["Vol_SMA20"]
+        )
+
+        resistance = float(
+            latest["Resistance_20"]
+        )
+
+        support = float(
+            latest["Support_20"]
         )
 
         # ==========================================================
-        # 2. Send Telegram Market Report (Top 5 Only)
+        # Validation & Strict RSI Overbought Filter (Anti-Correction)
         # ==========================================================
 
-        send_scanner_report(
-            opportunities
+        if (
+            close_price <= 0
+            or ma200 <= 0
+            or ema20 <= 0
+            or ema50 <= 0
+            or atr <= 0
+            or resistance <= 0
+            or support <= 0
+        ):
+            return None
+
+        # فلترة قاسية لمنع التشبع الشرائي والدخول في قمم متصححة
+        if rsi > MAX_ALLOWABLE_RSI:
+            return None
+
+        # ==========================================================
+        # EMA50 Slope
+        # ==========================================================
+
+        if len(df) >= 11:
+
+            ema50_10_days_ago = float(
+                df["EMA_50"].iloc[-11]
+            )
+
+            if ema50_10_days_ago > 0:
+
+                ema50_slope = (
+                    (ema50 - ema50_10_days_ago)
+                    / ema50_10_days_ago
+                ) * 100
+
+            else:
+
+                ema50_slope = 0
+
+        else:
+
+            ema50_slope = 0
+
+        # ==========================================================
+        # MA200 Slope
+        # ==========================================================
+
+        if len(df) >= 21:
+
+            ma200_20_days_ago = float(
+                df["MA_200"].iloc[-21]
+            )
+
+            if ma200_20_days_ago > 0:
+
+                ma200_slope = (
+                    (ma200 - ma200_20_days_ago)
+                    / ma200_20_days_ago
+                ) * 100
+
+            else:
+
+                ma200_slope = 0
+
+        else:
+
+            ma200_slope = 0
+
+        # ==========================================================
+        # EMA20 Slope
+        # ==========================================================
+
+        if len(df) >= 6:
+
+            ema20_5_days_ago = float(
+                df["EMA_20"].iloc[-6]
+            )
+
+            if ema20_5_days_ago > 0:
+
+                ema20_slope = (
+                    (ema20 - ema20_5_days_ago)
+                    / ema20_5_days_ago
+                ) * 100
+
+            else:
+
+                ema20_slope = 0
+
+        else:
+
+            ema20_slope = 0
+
+        # ==========================================================
+        # MACD Conditions
+        # ==========================================================
+
+        bullish_macd_cross = (
+            prev_macd <= prev_signal
+            and macd > macd_signal
+        )
+
+        macd_positive = (
+            macd > macd_signal
+            and macd > 0
         )
 
         # ==========================================================
-        # 3. Send User Portfolio Advisor Report
+        # Volume Ratio
         # ==========================================================
 
-        send_portfolio_report()
-
-        print(
-            "✅ All processes completed and reports sent successfully to Telegram."
+        volume_ratio = (
+            volume / vol_sma20
+            if vol_sma20 > 0
+            else 0
         )
+
+        # ==========================================================
+        # Breakout
+        # ==========================================================
+
+        breakout = (
+            close_price > resistance
+        )
+
+        # ==========================================================
+        # Distance From EMA20
+        # ==========================================================
+
+        distance_from_ema = (
+            (close_price - ema20)
+            / ema20
+        ) * 100
+
+        # ==========================================================
+        # Candlestick Confirmation
+        # ==========================================================
+
+        candle_reasons = analyze_candlesticks(
+            df
+        )
+
+        # ==========================================================
+        # Overall Current Market Score
+        # ==========================================================
+
+        score = 0
+
+        reasons = []
+
+        if close_price > ma200:
+
+            score += 10
+
+            reasons.append(
+                "✅ السعر أعلى من متوسط 200 يوم"
+            )
+
+        if ma200_slope > 0:
+
+            score += 5
+
+            reasons.append(
+                f"📈 MA200 صاعد ({ma200_slope:+.1f}%)"
+            )
+
+        if ema20 > ema50:
+
+            score += 10
+
+            reasons.append(
+                "📈 EMA20 أعلى من EMA50"
+            )
+
+        if ema50_slope > 0:
+
+            score += 5
+
+            reasons.append(
+                f"📈 EMA50 صاعد ({ema50_slope:+.1f}%)"
+            )
+
+        if (
+            adx > 25
+            and adx > prev_adx
+        ):
+
+            score += 10
+
+            reasons.append(
+                f"💪 اتجاه قوي ومتزايد (ADX: {adx:.1f})"
+            )
+
+        elif adx > 20:
+
+            score += 5
+
+            reasons.append(
+                f"📊 قوة اتجاه مقبولة (ADX: {adx:.1f})"
+            )
+
+        if 50 <= rsi <= 65:
+
+            score += 10
+
+            reasons.append(
+                f"🔥 RSI مناسب للزخم ({rsi:.1f})"
+            )
+
+        elif 45 <= rsi < 50:
+
+            score += 5
+
+            reasons.append(
+                f"⚠️ RSI ضعيف نسبيًا ({rsi:.1f})"
+            )
+
+        elif rsi < 40:
+
+            score += 5
+
+            reasons.append(
+                f"⚠️ RSI في مناطق التجميع ({rsi:.1f})"
+            )
+
+        if bullish_macd_cross:
+
+            score += 10
+
+            reasons.append(
+                "🚀 MACD Bullish Cross"
+            )
+
+        elif macd_positive:
+
+            score += 5
+
+            reasons.append(
+                "📈 MACD إيجابي"
+            )
+
+        if volume_ratio >= 1.5:
+
+            score += 10
+
+            reasons.append(
+                f"💥 حجم تداول قوي ({volume_ratio:.1f}x المتوسط)"
+            )
+
+        elif volume_ratio >= 1.0:
+
+            score += 5
+
+            reasons.append(
+                f"📊 حجم تداول جيد ({volume_ratio:.1f}x المتوسط)"
+            )
+
+        if breakout:
+
+            score += 5
+
+            reasons.append(
+                "🎯 السعر اخترق مقاومة الـ20 جلسة"
+            )
+
+        if candle_reasons:
+
+            score += min(
+                len(candle_reasons) * 5,
+                5
+            )
+
+            reasons.extend(
+                candle_reasons
+            )
+
+        score = min(
+            score,
+            100
+        )
+
+        # ==========================================================
+        # 1 MONTH FORECAST SCORE
+        # ==========================================================
+
+        forecast_1m_score = 0
+
+        if ema20 > ema50:
+            forecast_1m_score += 15
+
+        if ema20_slope > 0:
+            forecast_1m_score += 10
+
+        if ema50_slope > 0:
+            forecast_1m_score += 10
+
+        if close_price > ma200:
+            forecast_1m_score += 10
+
+        if adx > 25 and adx > prev_adx:
+            forecast_1m_score += 15
+
+        elif adx > 20:
+            forecast_1m_score += 8
+
+        if 50 <= rsi <= 65:
+            forecast_1m_score += 10
+
+        elif 45 <= rsi < 50:
+            forecast_1m_score += 5
+
+        if bullish_macd_cross:
+            forecast_1m_score += 15
+
+        elif macd_positive:
+            forecast_1m_score += 8
+
+        if volume_ratio >= 1.5:
+            forecast_1m_score += 10
+
+        elif volume_ratio >= 1.0:
+            forecast_1m_score += 5
+
+        # ==========================================================
+        # 2 MONTH FORECAST SCORE
+        # ==========================================================
+
+        forecast_2m_score = 0
+
+        if close_price > ma200:
+            forecast_2m_score += 15
+
+        if ma200_slope > 0:
+            forecast_2m_score += 15
+
+        if ema20 > ema50:
+            forecast_2m_score += 10
+
+        if ema50_slope > 0:
+            forecast_2m_score += 15
+
+        if adx > 25 and adx > prev_adx:
+            forecast_2m_score += 15
+
+        elif adx > 20:
+            forecast_2m_score += 8
+
+        if 50 <= rsi <= 65:
+            forecast_2m_score += 10
+
+        elif 45 <= rsi < 50:
+            forecast_2m_score += 5
+
+        if macd_positive:
+            forecast_2m_score += 10
+
+        elif bullish_macd_cross:
+            forecast_2m_score += 8
+
+        if volume_ratio >= 1.5:
+            forecast_2m_score += 10
+
+        elif volume_ratio >= 1.0:
+            forecast_2m_score += 5
+
+        forecast_1m_score = min(
+            forecast_1m_score,
+            100
+        )
+
+        forecast_2m_score = min(
+            forecast_2m_score,
+            100
+        )
+
+        if forecast_1m_score >= 85:
+            forecast_1m_status = "🔥 ترشيح قوي للشهر القادم"
+        elif forecast_1m_score >= 70:
+            forecast_1m_status = "🟢 ترشيح جيد للشهر القادم"
+        elif forecast_1m_score >= 55:
+            forecast_1m_status = "🟡 مراقبة للشهر القادم"
+        else:
+            forecast_1m_status = "🔴 ترشيح ضعيف للشهر القادم"
+
+        if forecast_2m_score >= 85:
+            forecast_2m_status = "🔥 ترشيح قوي للشهرين القادمين"
+        elif forecast_2m_score >= 70:
+            forecast_2m_status = "🟢 ترشيح جيد للشهرين القادمين"
+        elif forecast_2m_score >= 55:
+            forecast_2m_status = "🟡 مراقبة للشهرين القادمين"
+        else:
+            forecast_2m_status = "🔴 ترشيح ضعيف للشهرين القادمين"
+
+        if (
+            forecast_1m_score >= 65
+            and forecast_2m_score >= 65
+        ):
+            trend_status = "🟢 اتجاه حالي داعم للشهر والشهرين القادمين"
+        elif forecast_1m_score >= 65:
+            trend_status = "🟢 Setup أقوى للشهر القادم"
+        elif forecast_2m_score >= 65:
+            trend_status = "🟢 Setup أقوى للشهرين القادمين"
+        else:
+            trend_status = "🟡 Setup متوسط ويحتاج متابعة"
+
+        # ==========================================================
+        # Realistic Entry Analysis
+        # ==========================================================
+
+        max_allowed_drop = close_price * 0.985
+        realistic_support = max(support, max_allowed_drop)
+
+        ideal_entry = round(realistic_support, 2)
+        entry_high = round(close_price, 2)
+
+        overextended = (
+            distance_from_ema > 25
+        )
+
+        too_far_below_ema = (
+            distance_from_ema < -10
+        )
+
+        if overextended:
+            entry_status = "🟡 WAIT - السعر ممتد فوق EMA20"
+        elif too_far_below_ema:
+            entry_status = "🟡 WAIT - السعر بعيد عن المتوسطات"
+        else:
+            entry_status = "🟢 BUY - سعر الدخول قريب ومرتبط بالزخم الحالي"
+
+        # حساب إدارة المخاطر
+        risk_data = calculate_risk_management(df, close_price, support, resistance)
+
+        return {
+            "ticker": ticker_symbol,
+            "price": close_price,
+            "score": score,
+            "reasons": reasons,
+            "forecast_1m_score": forecast_1m_score,
+            "forecast_1m_status": forecast_1m_status,
+            "forecast_2m_score": forecast_2m_score,
+            "forecast_2m_status": forecast_2m_status,
+            "trend_status": trend_status,
+            "entry_status": entry_status,
+            "ideal_entry": ideal_entry,
+            "entry_high": entry_high,
+            "stop_loss": risk_data.get("stop_loss", 0),
+            "tp1": risk_data.get("tp1", 0),
+            "tp2": risk_data.get("tp2", 0),
+            "risk_reward_1": risk_data.get("risk_reward_1", 0),
+            "risk_reward_2": risk_data.get("risk_reward_2", 0),
+            "suggested_shares": risk_data.get("suggested_shares", 0),
+            "position_value": risk_data.get("position_value", 0),
+            "support": support,
+            "resistance": resistance,
+            "volume_ratio": volume_ratio,
+            "rsi": rsi,
+            "adx": adx,
+            "ma200_slope": ma200_slope,
+            "ema50_slope": ema50_slope,
+            "distance_from_ema": distance_from_ema
+        }
 
     except Exception as e:
-
-        print(
-            f"❌ Error while running bot: {e}"
-        )
-
-
-if __name__ == "__main__":
-    main()
+        print(f"Error in evaluate_stock_strategy: {e}")
+        return None
