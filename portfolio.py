@@ -17,11 +17,9 @@ MY_PORTFOLIO = {
 
 def analyze_user_portfolio():
     """
-    فحص وتحليل أسهم محفظة المستخدم الجديدة بناءً على أحدث إغلاق مسجل وإعطاء نصيحة ذكية.
+    فحص وتحليل أسهم محفظة المستخدم بناءً على أحدث إغلاق مسجل وإعطاء نصيحة ذكية.
     """
     portfolio_results = []
-
-    # جلب أسعار مباشر مرة واحدة بس لكل أسهم المحفظة (زي ما بنعمل في scan_market)
     mubasher_prices = fetch_mubasher_prices()
 
     for ticker, info in MY_PORTFOLIO.items():
@@ -33,8 +31,6 @@ def analyze_user_portfolio():
                 print(f"⚠️ تحذير: لم يتم جلب بيانات كافية للسهم {ticker}")
                 continue
 
-            # حساب المؤشرات الفنية - كانت مفقودة قبل كده، وده كان بيخلي
-            # كل النصائح ترجع "احتفاظ ومراقبة" دايمًا بسبب fallback على قيم وهمية
             df = calculate_indicators(df)
 
             if df is None or df.empty:
