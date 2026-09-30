@@ -48,7 +48,7 @@ if selected_stock:
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
-                    st.metric("السعر الحالي", f"{analysis['price']:.2f} ج.م", f"{analysis['data_source']}")
+                    st.metric("السعر الحالي", f"{analysis['price']:.2f} ج.م")
                 with col2:
                     st.metric("التقييم (Score)", f"{analysis['score']} / 100", analysis['rec'])
                 with col3:
@@ -107,4 +107,3 @@ if selected_stock:
                 st.subheader("💡 الأسباب والتحليل الفني:")
                 for reason in analysis.get('reasons', []):
                     st.write(f"- {reason}")
-
