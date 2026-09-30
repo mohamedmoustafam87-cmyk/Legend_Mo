@@ -6,11 +6,6 @@ from indicators import analyze_candlesticks
 def evaluate_stock_strategy(df, ticker_symbol):
 
     try:
-
-        # ==========================================================
-        # Basic Validation
-        # ==========================================================
-
         if df is None or len(df) < 220:
             return None
 
@@ -18,35 +13,16 @@ def evaluate_stock_strategy(df, ticker_symbol):
         prev = df.iloc[-2]
 
         required_columns = [
-            "Close",
-            "MA_200",
-            "EMA_20",
-            "EMA_50",
-            "RSI_14",
-            "ADX",
-            "MACD",
-            "MACD_signal",
-            "ATR",
-            "Volume",
-            "Vol_SMA20",
-            "Resistance_20",
-            "Support_20"
+            "Close", "MA_200", "EMA_20", "EMA_50", "RSI_14",
+            "ADX", "MACD", "MACD_signal", "ATR", "Volume",
+            "Vol_SMA20", "Resistance_20", "Support_20"
         ]
 
         for column in required_columns:
-
             if column not in df.columns:
                 return None
-
-            if (
-                latest[column] != latest[column]
-                or prev[column] != prev[column]
-            ):
+            if latest[column] != latest[column] or prev[column] != prev[column]:
                 return None
-
-        # ==========================================================
-        # Current Values
-        # ==========================================================
 
         close_price = float(latest["Close"])
         ma200 = float(latest["MA_200"])
@@ -65,27 +41,11 @@ def evaluate_stock_strategy(df, ticker_symbol):
         resistance = float(latest["Resistance_20"])
         support = float(latest["Support_20"])
 
-        # ==========================================================
-        # Validation & Strict RSI Overbought Filter
-        # ==========================================================
-
-        if (
-            close_price <= 0
-            or ma200 <= 0
-            or ema20 <= 0
-            or ema50 <= 0
-            or atr <= 0
-            or resistance <= 0
-            or support <= 0
-        ):
+        if close_price <= 0 or ma200 <= 0 or ema20 <= 0 or ema50 <= 0 or atr <= 0 or resistance <= 0 or support <= 0:
             return None
 
         if rsi > MAX_ALLOWABLE_RSI:
             return None
-
-        # ==========================================================
-        # Slopes Calculation
-        # ==========================================================
 
         ema50_slope = 0
         if len(df) >= 11:
@@ -113,10 +73,6 @@ def evaluate_stock_strategy(df, ticker_symbol):
         distance_from_ema = ((close_price - ema20) / ema20) * 100
 
         candle_reasons = analyze_candlesticks(df)
-
-        # ==========================================================
-        # Overall Score
-        # ==========================================================
 
         score = 0
         reasons = []
@@ -178,10 +134,6 @@ def evaluate_stock_strategy(df, ticker_symbol):
 
         score = min(score, 100)
 
-        # ==========================================================
-        # Forecast Scores
-        # ==========================================================
-
         forecast_1m_score = 0
         if ema20 > ema50: forecast_1m_score += 15
         if ema20_slope > 0: forecast_1m_score += 10
@@ -232,10 +184,6 @@ def evaluate_stock_strategy(df, ticker_symbol):
         else:
             trend_status = "🟡 Setup متوسط ويحتاج متابعة"
 
-        # ==========================================================
-        # Entry & Risk Management Integration
-        # ==========================================================
-
         max_allowed_drop = close_price * 0.985
         realistic_support = max(support, max_allowed_drop)
 
@@ -252,16 +200,24 @@ def evaluate_stock_strategy(df, ticker_symbol):
         else:
             entry_status = "🟢 BUY - سعر الدخول قريب ومرتبط بالزخم الحالي"
 
-        # استدعاء دالة إدارة المخاطر للحصول على الأهداف ووقف الخسارة
-        risk_data = calculate_risk_management(df, close_price, support, resistance)
+        risk_data = calculate_risk_management(close_price, atr, support)
+        if not risk_data:
+            return None
 
-        # تحديد التوصية بناءً على الـ Score
         if score >= 85:
             recommendation = "🔥 BUY STRONG"
         elif score >= 70:
             recommendation = "🟢 BUY"
         else:
             recommendation = "🟡 WATCH"
+
+        # خطة الخروج
+        if rsi >= 75 or close_price >= resistance * 0.98:
+            exit_strategy = "💰 تشبع شرائي أو اقتراب مقاومة - يُنصح بجني أرباح جزئي"
+        elif close_price < risk_data["stop_loss"]:
+            exit_strategy = "🔴 تم كسر نقطة وقف الخسارة - خروج فوري للحفاظ على رأس المال"
+        else:
+            exit_strategy = "🟢 الوضع الفني آمن - استمر في الاحتفاظ حتى الأهداف"
 
         return {
             "ticker": ticker_symbol,
@@ -285,20 +241,19 @@ def evaluate_stock_strategy(df, ticker_symbol):
             "support": support,
             "resistance": resistance,
             "atr": atr,
-            # ربط بيانات المخاطر المتوقعة في report.py
-            "shares": risk_data.get("shares", 1000),
-            "stop_loss": risk_data.get("stop_loss", close_price * 0.95),
-            "stop_loss_pct": risk_data.get("stop_loss_pct", 5.0),
-            "tp1": risk_data.get("tp1", close_price * 1.05),
-            "days_tp1_text": risk_data.get("days_tp1_text", "15-30 يوم"),
-            "tp2": risk_data.get("tp2", close_price * 1.10),
-            "days_tp2_text": risk_data.get("days_tp2_text", "30-60 يوم"),
-            "position_value": risk_data.get("position_value", close_price * 1000),
+            "shares": risk_data.get("shares", 0),
+            "stop_loss": risk_data.get("stop_loss", 0),
+            "stop_loss_pct": risk_data.get("stop_loss_pct", 0),
+            "tp1": risk_data.get("tp1", 0),
+            "days_tp1_text": "15-30 يوم",
+            "tp2": risk_data.get("tp2", 0),
+            "days_tp2_text": "30-60 يوم",
+            "position_value": risk_data.get("position_value", 0),
             "actual_risk": risk_data.get("actual_risk", 0),
             "risk_per_share": risk_data.get("risk_per_share", 0),
-            "rr1": risk_data.get("risk_reward_1", risk_data.get("rr1", 1.5)),
-            "rr2": risk_data.get("risk_reward_2", risk_data.get("rr2", 2.5)),
-            "exit_strategy": risk_data.get("exit_strategy", "🟢 الوضع آمن - استمر في الاحتفاظ")
+            "rr1": risk_data.get("rr1", 0),
+            "rr2": risk_data.get("rr2", 0),
+            "exit_strategy": exit_strategy
         }
 
     except Exception as e:
