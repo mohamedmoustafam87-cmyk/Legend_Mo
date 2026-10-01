@@ -34,15 +34,21 @@ REQUEST_TIMEOUT = 15
 
 def clean_symbol(symbol):
     """
-    Convert:
-        COMI.CA -> COMI
-        NIPH.CA -> NIPH
+    تحويل رمز السهم إلى الشكل الموحد:
+
+    COMI.CA -> COMI
+    NIPH.CA -> NIPH
     """
 
     if symbol is None:
         return ""
 
-    return str(symbol).upper().replace(".CA", "").strip()
+    return (
+        str(symbol)
+        .upper()
+        .replace(".CA", "")
+        .strip()
+    )
 
 
 def safe_float(value, default=None):
@@ -90,7 +96,10 @@ def fetch_mubasher_prices():
 
         payload = response.json()
 
-        data = payload.get("data", [])
+        data = payload.get(
+            "data",
+            []
+        )
 
         if not isinstance(data, list):
             return {}
@@ -99,7 +108,10 @@ def fetch_mubasher_prices():
 
         for item in data:
 
-            if not isinstance(item, dict):
+            if not isinstance(
+                item,
+                dict
+            ):
                 continue
 
             symbol = (
@@ -115,16 +127,29 @@ def fetch_mubasher_prices():
                 or item.get("close")
             )
 
-            symbol = clean_symbol(symbol)
-            price = safe_float(price)
+            symbol = clean_symbol(
+                symbol
+            )
 
-            if symbol and price is not None and price > 0:
+            price = safe_float(
+                price
+            )
+
+            if (
+                symbol
+                and price is not None
+                and price > 0
+            ):
 
                 prices[symbol] = price
 
         return prices
 
-    except Exception:
+    except Exception as e:
+
+        print(
+            f"⚠️ Mubasher price error: {e}"
+        )
 
         return {}
 
@@ -178,7 +203,9 @@ def fetch_yahoo_history(
 
         result = result[0]
 
-        timestamps = result.get("timestamp")
+        timestamps = result.get(
+            "timestamp"
+        )
 
         indicators = result.get(
             "indicators",
@@ -203,6 +230,7 @@ def fetch_yahoo_history(
                 "Close": quote.get("close"),
                 "Volume": quote.get("volume"),
             },
+
             index=pd.to_datetime(
                 timestamps,
                 unit="s"
@@ -219,7 +247,7 @@ def fetch_yahoo_history(
             "High",
             "Low",
             "Close",
-            "Volume"
+            "Volume",
         ]:
 
             df[column] = pd.to_numeric(
@@ -233,7 +261,7 @@ def fetch_yahoo_history(
                 "High",
                 "Low",
                 "Close",
-                "Volume"
+                "Volume",
             ],
             inplace=True
         )
@@ -247,7 +275,11 @@ def fetch_yahoo_history(
 
         return df
 
-    except Exception:
+    except Exception as e:
+
+        print(
+            f"⚠️ Yahoo error for {symbol}: {e}"
+        )
 
         return None
 
@@ -261,7 +293,11 @@ def get_stock_data(
     mubasher_prices=None
 ):
 
-    symbol = str(symbol).upper().strip()
+    symbol = (
+        str(symbol)
+        .upper()
+        .strip()
+    )
 
     df = fetch_yahoo_history(
         symbol
@@ -275,20 +311,25 @@ def get_stock_data(
         df["Close"].iloc[-1]
     )
 
-    if historical_close is None or historical_close <= 0:
+    if (
+        historical_close is None
+        or historical_close <= 0
+    ):
 
         return None, "Invalid Historical Data"
 
     # ------------------------------------------------------
-    # Current Mubasher Price
+    # Mubasher Current Price
     # ------------------------------------------------------
 
     mubasher_price = None
 
     if mubasher_prices is not None:
 
-        mubasher_price = mubasher_prices.get(
-            clean_symbol(symbol)
+        mubasher_price = (
+            mubasher_prices.get(
+                clean_symbol(symbol)
+            )
         )
 
     # ------------------------------------------------------
@@ -300,7 +341,9 @@ def get_stock_data(
         and mubasher_price > 0
     ):
 
-        current_price = mubasher_price
+        current_price = (
+            mubasher_price
+        )
 
         price_source = (
             "Mubasher Current"
@@ -314,7 +357,9 @@ def get_stock_data(
 
     else:
 
-        current_price = historical_close
+        current_price = (
+            historical_close
+        )
 
         price_source = (
             "Yahoo Last Close"
@@ -327,17 +372,21 @@ def get_stock_data(
         )
 
     # ------------------------------------------------------
-    # Metadata
+    # Current vs Historical Close
     # ------------------------------------------------------
 
     current_vs_close_pct = (
         (
-            current_price -
-            historical_close
+            current_price
+            - historical_close
         )
         /
         historical_close
     ) * 100
+
+    # ------------------------------------------------------
+    # Metadata
+    # ------------------------------------------------------
 
     df.attrs["symbol"] = symbol
 
@@ -358,7 +407,10 @@ def get_stock_data(
     )
 
     df.attrs["current_vs_close_pct"] = (
-        current_vs_close_pct
+        round(
+            current_vs_close_pct,
+            2
+        )
     )
 
     df.attrs["data_source"] = (
@@ -372,9 +424,7 @@ def get_stock_data(
 # Validate Current Price
 # ==========================================================
 
-def validate_current_price(
-    df
-):
+def validate_current_price(df):
 
     if df is None or df.empty:
         return False
@@ -395,21 +445,21 @@ def validate_current_price(
 # Liquidity Filter
 # ==========================================================
 
-def passes_liquidity_filter(
-    df
-):
+def passes_liquidity_filter(df):
 
     if df is None or df.empty:
         return False
 
-    sample = df.tail(20).copy()
+    sample = df.tail(
+        20
+    ).copy()
 
     if len(sample) < 20:
         return False
 
     sample["DailyValue"] = (
-        sample["Close"] *
-        sample["Volume"]
+        sample["Close"]
+        * sample["Volume"]
     )
 
     avg_daily_value = (
@@ -423,14 +473,14 @@ def passes_liquidity_filter(
     )
 
     if (
-        avg_daily_value <
-        MIN_AVG_DAILY_VALUE
+        avg_daily_value
+        < MIN_AVG_DAILY_VALUE
     ):
         return False
 
     if (
-        avg_volume <
-        MIN_AVG_VOLUME
+        avg_volume
+        < MIN_AVG_VOLUME
     ):
         return False
 
@@ -443,11 +493,34 @@ def passes_liquidity_filter(
 
 def scan_market():
 
+    print(
+        "🔎 Starting market scan..."
+    )
+
+    # جلب أسعار مباشر مرة واحدة فقط
     mubasher_prices = (
         fetch_mubasher_prices()
     )
 
+    if mubasher_prices:
+
+        print(
+            f"📡 Mubasher prices loaded: "
+            f"{len(mubasher_prices)} stocks"
+        )
+
+    else:
+
+        print(
+            "⚠️ Mubasher unavailable. "
+            "Using Yahoo Last Close."
+        )
+
     results = []
+
+    # ------------------------------------------------------
+    # Scan Universe
+    # ------------------------------------------------------
 
     for symbol in EGX_STOCKS:
 
@@ -464,26 +537,46 @@ def scan_market():
             # Historical Data
             # --------------------------------------------------
 
-            df, data_source = get_stock_data(
-                symbol,
-                mubasher_prices
+            df, data_source = (
+                get_stock_data(
+                    symbol,
+                    mubasher_prices
+                )
             )
 
             if df is None:
                 continue
 
             # --------------------------------------------------
-            # Liquidity
+            # Validate Current Price
             # --------------------------------------------------
 
-            if not passes_liquidity_filter(df):
+            if not validate_current_price(
+                df
+            ):
+
+                print(
+                    f"⚠️ Invalid current price: "
+                    f"{symbol}"
+                )
+
                 continue
 
             # --------------------------------------------------
-            # Preserve Current Price Metadata
+            # Liquidity
+            # --------------------------------------------------
+
+            if not passes_liquidity_filter(
+                df
+            ):
+                continue
+
+            # --------------------------------------------------
+            # Preserve Price Metadata
             # --------------------------------------------------
 
             metadata = {
+
                 "current_price":
                     df.attrs.get(
                         "current_price"
@@ -512,7 +605,8 @@ def scan_market():
 
                 "data_source":
                     df.attrs.get(
-                        "data_source"
+                        "data_source",
+                        data_source
                     ),
             }
 
@@ -527,8 +621,13 @@ def scan_market():
             if df is None:
                 continue
 
-            # Restore metadata
-            for key, value in metadata.items():
+            # --------------------------------------------------
+            # Restore Metadata
+            # --------------------------------------------------
+
+            for key, value in (
+                metadata.items()
+            ):
 
                 df.attrs[key] = value
 
@@ -536,9 +635,11 @@ def scan_market():
             # Strategy
             # --------------------------------------------------
 
-            analysis = evaluate_stock_strategy(
-                df,
-                symbol
+            analysis = (
+                evaluate_stock_strategy(
+                    df,
+                    symbol
+                )
             )
 
             if analysis is None:
@@ -549,32 +650,41 @@ def scan_market():
             # --------------------------------------------------
 
             analysis["current_price"] = (
-                metadata["current_price"]
+                metadata[
+                    "current_price"
+                ]
             )
 
             analysis["historical_close"] = (
-                metadata["historical_close"]
+                metadata[
+                    "historical_close"
+                ]
             )
 
-            analysis["current_vs_close_pct"] = (
-                round(
-                    metadata[
-                        "current_vs_close_pct"
-                    ],
-                    2
-                )
+            analysis[
+                "current_vs_close_pct"
+            ] = (
+                metadata[
+                    "current_vs_close_pct"
+                ]
             )
 
             analysis["price_source"] = (
-                metadata["price_source"]
+                metadata[
+                    "price_source"
+                ]
             )
 
             analysis["is_realtime"] = (
-                metadata["is_realtime"]
+                metadata[
+                    "is_realtime"
+                ]
             )
 
             analysis["data_source"] = (
-                metadata["data_source"]
+                metadata[
+                    "data_source"
+                ]
             )
 
             # --------------------------------------------------
@@ -582,20 +692,34 @@ def scan_market():
             # --------------------------------------------------
 
             analysis["strategy_price"] = (
-                analysis["price"]
+                analysis.get(
+                    "price",
+                    metadata[
+                        "historical_close"
+                    ]
+                )
             )
 
             # --------------------------------------------------
-            # DataFrame
+            # IMPORTANT
             # --------------------------------------------------
-
-            analysis["_dataframe"] = df
+            # لا نضع DataFrame داخل نتيجة التقرير.
+            # Telegram / sorting / serialization
+            # لا تحتاجه.
+            #
+            # Dashboard يجلب البيانات بنفسه.
+            # --------------------------------------------------
 
             results.append(
                 analysis
             )
 
-        except Exception:
+        except Exception as e:
+
+            print(
+                f"⚠️ Error scanning "
+                f"{symbol}: {e}"
+            )
 
             continue
 
@@ -604,8 +728,11 @@ def scan_market():
     # ==========================================================
 
     results.sort(
-        key=lambda x: x.get(
-            "score",
+        key=lambda x: safe_float(
+            x.get(
+                "score",
+                0
+            ),
             0
         ),
         reverse=True
@@ -616,12 +743,29 @@ def scan_market():
     # ==========================================================
 
     filtered_results = [
+
         item
+
         for item in results
-        if item.get(
-            "score",
+
+        if safe_float(
+            item.get(
+                "score",
+                0
+            ),
             0
-        ) >= MIN_SCORE_THRESHOLD
+        )
+        >= MIN_SCORE_THRESHOLD
+
     ]
+
+    print(
+        f"📊 Qualified stocks: "
+        f"{len(filtered_results)}"
+    )
+
+    # ==========================================================
+    # TOP 5
+    # ==========================================================
 
     return filtered_results[:5]
