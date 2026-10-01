@@ -820,22 +820,24 @@ def load_analysis(
     """
     تحميل بيانات Yahoo التاريخية
     + السعر الحالي من Mubasher.
-
-    مهم:
-    سعر Mubasher لا يدخل في حساب المؤشرات.
     """
-
-    result = get_stock_data(
-        ticker,
-        prices
-    )
-
-    if not result:
+    try:
+        result = get_stock_data(
+            ticker,
+            prices
+        )
+    except Exception:
         return None, None
 
-    df, data_source = result
+    if result is None:
+        return None, None
 
-    if df is None or df.empty:
+    if isinstance(result, tuple):
+        df, data_source = result
+    else:
+        df, data_source = result, "Unknown"
+
+    if df is None or not isinstance(df, pd.DataFrame) or df.empty:
         return None, None
 
     # -------------------------------------------------------------
@@ -869,7 +871,7 @@ def load_analysis(
 
     df = standardize_ohlcv(df)
 
-    if df.empty:
+    if df is None or df.empty:
         return None, None
 
     # -------------------------------------------------------------
@@ -883,7 +885,7 @@ def load_analysis(
 
     df = standardize_ohlcv(df)
 
-    if df.empty:
+    if df is None or df.empty:
         return None, None
 
     # -------------------------------------------------------------
