@@ -93,7 +93,7 @@ def find_column(df, candidates):
 
 
 def standardize_ohlcv(df):
-    """توحيد أسماء الأعمدة مع الحفاظ على التاريخ كـ index (مهم للشارت والفحوصات)."""
+    """توحيد أسماء الأعمدة مع الحفاظ على التاريخ كـ index."""
     if df is None or len(df) == 0:
         return pd.DataFrame()
 
@@ -138,10 +138,6 @@ def standardize_ohlcv(df):
 
 
 def ensure_indicators(df):
-    """
-    بيكمل أي مؤشر ناقص بعد calculate_indicators (مصدر الحقيقة = indicators.py).
-    لا يعيد حساب ولا يكتب فوق أي عمود موجود.
-    """
     df = df.copy()
     close = df["Close"]
 
@@ -260,7 +256,6 @@ def detect_market_structure(df):
 
 
 def _cluster_levels(levels, tolerance):
-    """تجميع المستويات المتقاربة. بيرجع [(المستوى, عدد اللمسات)]."""
     clusters = []
     for level in sorted(levels):
         if clusters and abs(level - np.mean(clusters[-1])) / max(np.mean(clusters[-1]), 1e-9) <= tolerance:
@@ -288,13 +283,12 @@ def find_support_resistance(df, window=SR_WINDOW):
     sup = _cluster_levels([x for x in supports if x < price], SUPPORT_TOLERANCE)
     res = _cluster_levels([x for x in resistances if x > price], RESISTANCE_TOLERANCE)
 
-    sup = sorted(sup, key=lambda x: x[0], reverse=True)[:5]   # الأقرب أولاً
+    sup = sorted(sup, key=lambda x: x[0], reverse=True)[:5]
     res = sorted(res, key=lambda x: x[0])[:5]
     return sup, res
 
 
 def calc_fibonacci(data):
-    """تصحيحات فيبوناتشي حسب اتجاه آخر موجة داخل النافذة المعروضة."""
     high_val, low_val = data["High"].max(), data["Low"].min()
     diff = high_val - low_val
     if not np.isfinite(diff) or diff <= 0:
@@ -346,7 +340,7 @@ def risk_label(score):
 
 
 # =====================================================================
-# DATA LOADING (كاش على التحليل كله)
+# DATA LOADING
 # =====================================================================
 @st.cache_data(ttl=300, show_spinner=False)
 def load_mubasher():
@@ -359,10 +353,6 @@ def load_mubasher():
 
 @st.cache_data(ttl=300, show_spinner=False)
 def load_analysis(ticker, prices):
-    """
-    المؤشرات بتتحسب على التاريخ الكامل (مش المعروض بس)،
-    والـ strategy بتستلم نفس الـ df ونفس الـ ticker.
-    """
     df = standardize_ohlcv(get_stock_data(ticker, prices))
     if df.empty:
         return None, None
@@ -376,7 +366,7 @@ def load_analysis(ticker, prices):
 
 
 # =====================================================================
-# CHART
+# CHART BUILDER
 # =====================================================================
 def build_chart(data, ticker, opts, analysis, supports, resistances):
     has_volume = opts["volume"] and "Volume" in data.columns
@@ -452,7 +442,6 @@ def build_chart(data, ticker, opts, analysis, supports, resistances):
         fig.add_hline(y=30, line_dash="dash", line_color="green", row=rows["rsi"], col=1)
         fig.update_yaxes(title_text="RSI", range=[0, 100], row=rows["rsi"], col=1)
 
-    # إخفاء الجمعة والسبت والعطلات الرسمية
     if isinstance(data.index, pd.DatetimeIndex):
         breaks = [dict(bounds=["fri", "sat"])]
         if EGX_HOLIDAYS:
@@ -475,7 +464,7 @@ def build_chart(data, ticker, opts, analysis, supports, resistances):
 
 
 # =====================================================================
-# SIDEBAR
+# SIDEBAR (للإعدادات الأساسية فقط: اختيار السهم والتحكم بالجلسات)
 # =====================================================================
 st.sidebar.title("📊 EGX Smart Dashboard")
 
@@ -490,17 +479,6 @@ history_days = st.sidebar.slider("عدد الجلسات المعروضة", 60, 5
 if st.sidebar.button("🔄 تحديث البيانات"):
     st.cache_data.clear()
     st.rerun()
-
-st.sidebar.header("⚙️ أدوات الشارت")
-opts = {
-    "ema20": st.sidebar.checkbox("EMA 20", value=True),
-    "ema50": st.sidebar.checkbox("EMA 50", value=False),
-    "ma200": st.sidebar.checkbox("MA 200", value=True),
-    "support": st.sidebar.checkbox("الدعم والمقاومة", value=True),
-    "fib": st.sidebar.checkbox("فيبوناتشي (Fibonacci)", value=False),
-    "volume": st.sidebar.checkbox("حجم التداول (Volume)", value=True),
-    "rsi": st.sidebar.checkbox("مؤشر RSI", value=True),
-}
 
 
 # =====================================================================
@@ -609,18 +587,42 @@ with m2:
 with m3:
     st.info(f"نسبة الحجم للمتوسط: **{fmt(volume_ratio, 2, 'x')}**")
 
+st.markdown("---")
+
+
+# =====================================================================
+# DASHBOARD CONTROLS (أدوات الشارت المباشرة على الواجهة)
+# =====================================================================
+st.markdown('<div class="section-title">⚙️️ تخصيص وعرض أدوات الشارت</div>', unsafe_allow_html=True)
+opt_col1, opt_col2, opt_col3, opt_col4, opt_col5, opt_col6, opt_col7 = st.columns(7)
+
+opts = {}
+with opt_col1:
+    opts["ema20"] = st.checkbox("EMA 20", value=True)
+with opt_col2:
+    opts["ema50"] = st.checkbox("EMA 50", value=False)
+with opt_col3:
+    opts["ma200"] = st.checkbox("MA 200", value=True)
+with opt_col4:
+    opts["support"] = st.checkbox("الدعم والمقاومة", value=True)
+with opt_col5:
+    opts["fib"] = st.checkbox("فيبوناتشي", value=False)
+with opt_col6:
+    opts["volume"] = st.checkbox("حجم التداول", value=True)
+with opt_col7:
+    opts["rsi"] = st.checkbox("مؤشر RSI", value=True)
+
 
 # =====================================================================
 # CHART
 # =====================================================================
-st.subheader(f"📊 الرسم البياني التفاعلي لـ {selected_ticker}")
 chart_df = df.tail(history_days)
 fig = build_chart(chart_df, selected_ticker, opts, analysis, supports, resistances)
 st.plotly_chart(fig, use_container_width=True)
 
 
 # =====================================================================
-# RECOMMENDATIONS + RISK MANAGEMENT (من محرك الاستراتيجية)
+# RECOMMENDATIONS + RISK MANAGEMENT
 # =====================================================================
 if analysis:
     st.markdown("---")
@@ -707,7 +709,7 @@ indicator_rows = [
 st.dataframe(
     pd.DataFrame({
         "المؤشر": [r[0] for r in indicator_rows],
-        "القيمة": [fmt(r[1], r[2]) for r in indicator_rows],   # نصوص كلها لتفادي خطأ Arrow
+        "القيمة": [fmt(r[1], r[2]) for r in indicator_rows],
     }),
     use_container_width=True,
     hide_index=True,
