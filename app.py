@@ -19,7 +19,6 @@ st.set_page_config(
     page_title="EGX Smart Dashboard",
     page_icon="📈",
     layout="wide",
-    initial_sidebar_state="expanded",
 )
 
 st.markdown(
@@ -153,51 +152,16 @@ def standardize_ohlcv(df):
     if df is None or len(df) == 0:
         return pd.DataFrame()
 
-    # حفظ metadata
     attrs = dict(getattr(df, "attrs", {}))
-
     df = df.copy()
 
     aliases = {
-        "Date": [
-            "date",
-            "datetime",
-            "time",
-            "التاريخ",
-        ],
-
-        "Open": [
-            "open",
-            "opening",
-            "الفتح",
-        ],
-
-        "High": [
-            "high",
-            "الاعلى",
-            "أعلى",
-        ],
-
-        "Low": [
-            "low",
-            "الادنى",
-            "أدنى",
-        ],
-
-        "Close": [
-            "close",
-            "price",
-            "last",
-            "السعر",
-            "الإغلاق",
-        ],
-
-        "Volume": [
-            "volume",
-            "vol",
-            "الحجم",
-            "حجم التداول",
-        ],
+        "Date": ["date", "datetime", "time", "التاريخ"],
+        "Open": ["open", "opening", "الفتح"],
+        "High": ["high", "الاعلى", "أعلى"],
+        "Low": ["low", "الادنى", "أدنى"],
+        "Close": ["close", "price", "last", "السعر", "الإغلاق"],
+        "Volume": ["volume", "vol", "الحجم", "حجم التداول"],
     }
 
     rename_map = {}
@@ -212,13 +176,7 @@ def standardize_ohlcv(df):
         if col is not None and col != std:
             rename_map[col] = std
 
-    df = df.rename(
-        columns=rename_map
-    )
-
-    # -------------------------------------------------------------
-    # DATE
-    # -------------------------------------------------------------
+    df = df.rename(columns=rename_map)
 
     if "Date" in df.columns:
 
@@ -244,16 +202,9 @@ def standardize_ohlcv(df):
     ):
 
         try:
-            df.index = pd.to_datetime(
-                df.index
-            )
-
+            df.index = pd.to_datetime(df.index)
         except Exception:
             pass
-
-    # -------------------------------------------------------------
-    # NUMERIC
-    # -------------------------------------------------------------
 
     for col in [
         "Open",
@@ -286,8 +237,6 @@ def standardize_ohlcv(df):
     ]
 
     df.index.name = "Date"
-
-    # إعادة metadata
     df.attrs.update(attrs)
 
     return df
@@ -329,10 +278,6 @@ def validate_market_data(df):
             f"فمتوسط MA 200 غير مكتمل."
         )
 
-    # -------------------------------------------------------------
-    # DATA AGE
-    # -------------------------------------------------------------
-
     if isinstance(
         df.index,
         pd.DatetimeIndex
@@ -356,10 +301,6 @@ def validate_market_data(df):
                     f"آخر جلسة: "
                     f"{last_date.date()}"
                 )
-
-    # -------------------------------------------------------------
-    # VOLUME
-    # -------------------------------------------------------------
 
     if "Volume" in df.columns:
 
@@ -817,10 +758,6 @@ def load_analysis(
     ticker,
     prices
 ):
-    """
-    تحميل بيانات Yahoo التاريخية
-    + السعر الحالي من Mubasher.
-    """
     try:
         result = get_stock_data(
             ticker,
@@ -840,43 +777,16 @@ def load_analysis(
     if df is None or not isinstance(df, pd.DataFrame) or df.empty:
         return None, None
 
-    # -------------------------------------------------------------
-    # حفظ بيانات السعر الحالي
-    # -------------------------------------------------------------
-
-    current_price = df.attrs.get(
-        "current_price"
-    )
-
-    historical_close = df.attrs.get(
-        "historical_close"
-    )
-
-    price_source = df.attrs.get(
-        "price_source"
-    )
-
-    is_realtime = df.attrs.get(
-        "is_realtime",
-        False
-    )
-
-    current_vs_close_pct = df.attrs.get(
-        "current_vs_close_pct"
-    )
-
-    # -------------------------------------------------------------
-    # STANDARDIZE
-    # -------------------------------------------------------------
+    current_price = df.attrs.get("current_price")
+    historical_close = df.attrs.get("historical_close")
+    price_source = df.attrs.get("price_source")
+    is_realtime = df.attrs.get("is_realtime", False)
+    current_vs_close_pct = df.attrs.get("current_vs_close_pct")
 
     df = standardize_ohlcv(df)
 
     if df is None or df.empty:
         return None, None
-
-    # -------------------------------------------------------------
-    # INDICATORS
-    # -------------------------------------------------------------
 
     df = calculate_indicators(df)
 
@@ -888,72 +798,26 @@ def load_analysis(
     if df is None or df.empty:
         return None, None
 
-    # -------------------------------------------------------------
-    # RESTORE METADATA
-    # -------------------------------------------------------------
-
-    df.attrs["current_price"] = (
-        current_price
-    )
-
-    df.attrs["historical_close"] = (
-        historical_close
-    )
-
-    df.attrs["price_source"] = (
-        price_source
-    )
-
-    df.attrs["is_realtime"] = (
-        is_realtime
-    )
-
-    df.attrs["current_vs_close_pct"] = (
-        current_vs_close_pct
-    )
-
-    df.attrs["data_source"] = (
-        data_source
-    )
-
-    # -------------------------------------------------------------
-    # STRATEGY
-    # -------------------------------------------------------------
+    df.attrs["current_price"] = current_price
+    df.attrs["historical_close"] = historical_close
+    df.attrs["price_source"] = price_source
+    df.attrs["is_realtime"] = is_realtime
+    df.attrs["current_vs_close_pct"] = current_vs_close_pct
+    df.attrs["data_source"] = data_source
 
     analysis = evaluate_stock_strategy(
         df,
         ticker
     )
 
-    # -------------------------------------------------------------
-    # ADD CURRENT PRICE METADATA
-    # -------------------------------------------------------------
-
     if analysis is not None:
 
-        analysis["current_price"] = (
-            current_price
-        )
-
-        analysis["historical_close"] = (
-            historical_close
-        )
-
-        analysis["price_source"] = (
-            price_source
-        )
-
-        analysis["is_realtime"] = (
-            is_realtime
-        )
-
-        analysis["current_vs_close_pct"] = (
-            current_vs_close_pct
-        )
-
-        analysis["data_source"] = (
-            data_source
-        )
+        analysis["current_price"] = current_price
+        analysis["historical_close"] = historical_close
+        analysis["price_source"] = price_source
+        analysis["is_realtime"] = is_realtime
+        analysis["current_vs_close_pct"] = current_vs_close_pct
+        analysis["data_source"] = data_source
 
     return df, analysis
 
@@ -1012,10 +876,6 @@ def build_chart(
         row_heights=heights,
     )
 
-    # -------------------------------------------------------------
-    # CANDLESTICK
-    # -------------------------------------------------------------
-
     fig.add_trace(
 
         go.Candlestick(
@@ -1030,10 +890,6 @@ def build_chart(
         row=1,
         col=1,
     )
-
-    # -------------------------------------------------------------
-    # EMA 20
-    # -------------------------------------------------------------
 
     if (
         opts["ema20"]
@@ -1057,10 +913,6 @@ def build_chart(
             col=1,
         )
 
-    # -------------------------------------------------------------
-    # EMA 50
-    # -------------------------------------------------------------
-
     if (
         opts["ema50"]
         and "EMA_50" in data.columns
@@ -1082,10 +934,6 @@ def build_chart(
             row=1,
             col=1,
         )
-
-    # -------------------------------------------------------------
-    # MA 200
-    # -------------------------------------------------------------
 
     if (
         opts["ma200"]
@@ -1109,10 +957,6 @@ def build_chart(
             row=1,
             col=1,
         )
-
-    # -------------------------------------------------------------
-    # CURRENT PRICE
-    # -------------------------------------------------------------
 
     current_price = safe_float(
         data.attrs.get(
@@ -1141,10 +985,7 @@ def build_chart(
             col=1,
         )
 
-    # -------------------------------------------------------------
-    # SUPPORT / RESISTANCE
-    # -------------------------------------------------------------
-
+    # تفعيل رسم الدعم والمقاومة بناءً على الأزرار الجديدة
     if opts["support"]:
 
         main_support = (
@@ -1203,6 +1044,8 @@ def build_chart(
                 col=1,
             )
 
+    if opts["resistance"]:
+
         for level, touches in resistances:
 
             fig.add_hline(
@@ -1227,10 +1070,6 @@ def build_chart(
                 row=1,
                 col=1,
             )
-
-    # -------------------------------------------------------------
-    # FIBONACCI
-    # -------------------------------------------------------------
 
     if opts["fib"]:
 
@@ -1267,10 +1106,6 @@ def build_chart(
                 col=1,
             )
 
-    # -------------------------------------------------------------
-    # VOLUME
-    # -------------------------------------------------------------
-
     if has_volume:
 
         colors = [
@@ -1304,10 +1139,6 @@ def build_chart(
             row=rows["volume"],
             col=1,
         )
-
-    # -------------------------------------------------------------
-    # RSI
-    # -------------------------------------------------------------
 
     if has_rsi:
 
@@ -1351,10 +1182,6 @@ def build_chart(
             col=1,
         )
 
-    # -------------------------------------------------------------
-    # X AXIS / HOLIDAYS
-    # -------------------------------------------------------------
-
     if isinstance(
         data.index,
         pd.DatetimeIndex
@@ -1387,10 +1214,6 @@ def build_chart(
         fig.update_xaxes(
             rangebreaks=breaks
         )
-
-    # -------------------------------------------------------------
-    # LAYOUT
-    # -------------------------------------------------------------
 
     fig.update_yaxes(
         title_text="السعر (ج.م)",
@@ -1431,59 +1254,39 @@ def build_chart(
 
 
 # =====================================================================
-# SIDEBAR
+# MAIN DASHBOARD CONTROLS (بدون شريط جانبي)
 # =====================================================================
 
-st.sidebar.title(
-    "📊 EGX Smart Dashboard"
-)
+st.title("📈 لوحة تحليل الأسهم المصرية (EGX Smart Dashboard)")
+st.markdown("موقعك الاحترافي المتقدم لمتابعة الشموع اليابانية، المؤشرات الفنية، ومستويات الدعم والمقاومة لحظياً.")
 
-stocks = normalize_stock_list(
-    EGX_STOCKS
-)
+stocks = normalize_stock_list(EGX_STOCKS)
 
 if not stocks:
-
-    st.error(
-        "لم يتم العثور على EGX_STOCKS في config.py"
-    )
-
+    st.error("لم يتم العثور على EGX_STOCKS في config.py")
     st.stop()
 
-selected_ticker = st.sidebar.selectbox(
-    "🔎 اختر أو ابحث عن السهم",
-    stocks,
-    index=0
-)
+# صندوق البحث واختيار السهم مباشرة على الواجهة الرئيسية
+col_s1, col_s2 = st.columns([3, 1])
+with col_s1:
+    selected_ticker = st.selectbox(
+        "🔎 اختر أو ابحث عن السهم:",
+        stocks,
+        index=0
+    )
+with col_s2:
+    history_days = st.selectbox(
+        "عدد الجلسات",
+        [60, 120, 200, 365, 500],
+        index=1
+    )
 
-history_days = st.sidebar.slider(
-    "عدد الجلسات المعروضة",
-    60,
-    500,
-    120,
-    10
-)
-
-if st.sidebar.button(
-    "🔄 تحديث البيانات"
-):
-
+# زر تحديث البيانات
+if st.button("🔄 تحديث البيانات الحالية"):
     st.cache_data.clear()
     st.rerun()
 
-
-# =====================================================================
-# HEADER
-# =====================================================================
-
-st.title(
-    f"📈 {selected_ticker} — EGX Smart Dashboard"
-)
-
-st.caption(
-    "تحليل فني متعدد العوامل "
-    "مع فحص جودة البيانات"
-)
+st.markdown("---")
 
 
 # =====================================================================
@@ -1493,12 +1296,10 @@ st.caption(
 mubasher_prices = load_mubasher()
 
 if not mubasher_prices:
-
     st.warning(
         "⚠️ تعذر جلب السعر الحالي من مباشر، "
         "سيتم الاعتماد على آخر إغلاق Yahoo."
     )
-
 
 with st.spinner(
     f"جاري جلب وتحليل بيانات "
@@ -1521,7 +1322,6 @@ with st.spinner(
 
         st.stop()
 
-
 if df is None or df.empty:
 
     st.error(
@@ -1531,10 +1331,6 @@ if df is None or df.empty:
 
     st.stop()
 
-
-# =====================================================================
-# REQUIRED COLUMNS
-# =====================================================================
 
 missing = [
     c
@@ -1590,13 +1386,9 @@ current_vs_close_pct = safe_float(
 )
 
 if np.isnan(historical_close):
-
-    historical_close = safe_float(
-        df["Close"].iloc[-1]
-    )
+    historical_close = safe_float(df["Close"].iloc[-1])
 
 if np.isnan(current_price):
-
     current_price = historical_close
 
 
@@ -1604,90 +1396,40 @@ if np.isnan(current_price):
 # DATA QUALITY
 # =====================================================================
 
-quality = validate_market_data(
-    df
-)
-
+quality = validate_market_data(df)
 q = quality["score"]
 
 if q >= 80:
-
-    st.success(
-        f"🟢 جودة البيانات: {q}/100"
-    )
-
+    st.success(f"🟢 جودة البيانات: {q}/100")
 elif q >= 60:
-
-    st.warning(
-        f"🟠 جودة البيانات: {q}/100"
-    )
-
+    st.warning(f"🟠 جودة البيانات: {q}/100")
 else:
-
-    st.error(
-        f"🔴 جودة البيانات منخفضة: "
-        f"{q}/100 — "
-        f"التوصيات قد لا تكون موثوقة"
-    )
+    st.error(f"🔴 جودة البيانات منخفضة: {q}/100 — التوصيات قد لا تكون موثوقة")
 
 if quality["warnings"]:
-
-    with st.expander(
-        "تفاصيل جودة البيانات"
-    ):
-
+    with st.expander("تفاصيل جودة البيانات"):
         for warning in quality["warnings"]:
-
-            st.write(
-                f"• {warning}"
-            )
-
+            st.write(f"• {warning}")
 
 if analysis is None:
-
-    st.warning(
-        "⚠️ لا توجد بيانات كافية "
-        "لتشغيل محرك الاستراتيجية "
-        "على هذا السهم."
-    )
+    st.warning("⚠️ لا توجد بيانات كافية لتشغيل محرك الاستراتيجية على هذا السهم.")
 
 
 # =====================================================================
 # DAILY CHANGE
 # =====================================================================
 
-if not np.isnan(
-    current_vs_close_pct
-):
-
-    daily_change = (
-        current_vs_close_pct
-    )
-
+if not np.isnan(current_vs_close_pct):
+    daily_change = current_vs_close_pct
 else:
-
     prev_close = (
-        safe_float(
-            df["Close"].iloc[-2]
-        )
+        safe_float(df["Close"].iloc[-2])
         if len(df) >= 2
         else np.nan
     )
-
     daily_change = (
-
-        (
-            current_price
-            - prev_close
-        )
-        / prev_close
-        * 100
-
-        if (
-            not np.isnan(prev_close)
-            and prev_close != 0
-        )
-
+        (current_price - prev_close) / prev_close * 100
+        if not np.isnan(prev_close) and prev_close != 0
         else np.nan
     )
 
@@ -1697,42 +1439,16 @@ else:
 # =====================================================================
 
 last = df.iloc[-1]
+last_close = safe_float(last["Close"])
+rsi = safe_float(last.get("RSI_14"))
 
-last_close = safe_float(
-    last["Close"]
-)
-
-rsi = safe_float(
-    last.get("RSI_14")
-)
-
-# indicators.py يستخدم Volume_Ratio
-volume_ratio = safe_float(
-    last.get(
-        "Volume_Ratio"
-    )
-)
-
-# توافق مع أي نسخة قديمة
+volume_ratio = safe_float(last.get("Volume_Ratio"))
 if np.isnan(volume_ratio):
+    volume_ratio = safe_float(last.get("VolumeRatio"))
 
-    volume_ratio = safe_float(
-        last.get(
-            "VolumeRatio"
-        )
-    )
-
-risk_score = calculate_risk_score(
-    df
-)
-
-structure_data = detect_market_structure(
-    df
-)
-
-supports, resistances = (
-    find_support_resistance(df)
-)
+risk_score = calculate_risk_score(df)
+structure_data = detect_market_structure(df)
+supports, resistances = find_support_resistance(df)
 
 
 # =====================================================================
@@ -1740,120 +1456,41 @@ supports, resistances = (
 # =====================================================================
 
 if is_realtime:
-
-    st.success(
-        f"📡 السعر الحالي من Mubasher: "
-        f"**{current_price:,.2f} ج.م**"
-    )
-
+    st.success(f"📡 السعر الحالي من Mubasher: **{current_price:,.2f} ج.م**")
 else:
-
-    st.warning(
-        f"📡 Mubasher غير متاح — "
-        f"تم استخدام آخر إغلاق Yahoo: "
-        f"**{current_price:,.2f} ج.م**"
-    )
+    st.warning(f"📡 Mubasher غير متاح — تم استخدام آخر إغلاق Yahoo: **{current_price:,.2f} ج.م**")
 
 
 # =====================================================================
 # TOP METRICS
 # =====================================================================
 
-c1, c2, c3, c4, c5, c6 = (
-    st.columns(6)
-)
+c1, c2, c3, c4, c5, c6 = st.columns(6)
 
 with c1:
-
     st.metric(
         "السعر الحالي",
-        fmt(
-            current_price,
-            2,
-            " ج.م"
-        ),
-        (
-            f"{daily_change:+.2f}%"
-            if not np.isnan(
-                daily_change
-            )
-            else None
-        )
+        fmt(current_price, 2, " ج.م"),
+        f"{daily_change:+.2f}%" if not np.isnan(daily_change) else None
     )
-
 
 with c2:
-
-    st.metric(
-        "آخر إغلاق Yahoo",
-        fmt(
-            historical_close,
-            2,
-            " ج.م"
-        )
-    )
-
+    st.metric("آخر إغلاق Yahoo", fmt(historical_close, 2, " ج.م"))
 
 with c3:
-
     if analysis:
-
-        st.metric(
-            "التقييم (Score)",
-            f"{analysis.get('score', '—')} / 100",
-            analysis.get(
-                "rec",
-                ""
-            ),
-            delta_color="off"
-        )
-
+        st.metric("التقييم (Score)", f"{analysis.get('score', '—')} / 100", analysis.get("rec", ""), delta_color="off")
     else:
-
-        st.metric(
-            "التقييم (Score)",
-            "—"
-        )
-
+        st.metric("التقييم (Score)", "—")
 
 with c4:
-
-    st.metric(
-        "مؤشر RSI",
-        fmt(
-            rsi,
-            1
-        )
-    )
-
+    st.metric("مؤشر RSI", fmt(rsi, 1))
 
 with c5:
-
-    st.metric(
-        "الدعم الرئيسي",
-        fmt(
-            analysis.get(
-                "support"
-            )
-            if analysis
-            else None,
-            2,
-            " ج.م"
-        )
-    )
-
+    st.metric("الدعم الرئيسي", fmt(analysis.get("support") if analysis else None, 2, " ج.م"))
 
 with c6:
-
-    st.metric(
-        "درجة المخاطرة",
-        f"{risk_score}/100",
-        risk_label(
-            risk_score
-        ),
-        delta_color="off"
-    )
-
+    st.metric("درجة المخاطرة", f"{risk_score}/100", risk_label(risk_score), delta_color="off")
 
 st.markdown("---")
 
@@ -1862,50 +1499,24 @@ st.markdown("---")
 # MARKET STRUCTURE
 # =====================================================================
 
-st.markdown(
-    '<div class="section-title">'
-    '📐 هيكل السوق'
-    '</div>',
-    unsafe_allow_html=True
-)
-
+st.markdown('<div class="section-title">📐 هيكل السوق</div>', unsafe_allow_html=True)
 m1, m2, m3 = st.columns(3)
-
 with m1:
-
-    st.info(
-        f"الاتجاه الحالي: "
-        f"**{structure_data['trend']}**"
-    )
-
+    st.info(f"الاتجاه الحالي: **{structure_data['trend']}**")
 with m2:
-
-    st.info(
-        f"الهيكل السعري: "
-        f"**{structure_data['structure']}**"
-    )
-
+    st.info(f"الهيكل السعري: **{structure_data['structure']}**")
 with m3:
-
-    st.info(
-        f"نسبة الحجم للمتوسط: "
-        f"**{fmt(volume_ratio, 2, 'x')}**"
-    )
-
+    st.info(f"نسبة الحجم للمتوسط: **{fmt(volume_ratio, 2, 'x')}**")
 
 st.markdown("---")
 
 
 # =====================================================================
-# CHART CONTROLS
+# INTERACTIVE CHART CONTROLS (أزرار تفعيل الدعم، المقاومة، فيبوناتشي مباشرة على الواجهة)
 # =====================================================================
 
-st.markdown(
-    '<div class="section-title">'
-    '⚙️ تخصيص وعرض أدوات الشارت'
-    '</div>',
-    unsafe_allow_html=True
-)
+st.markdown('<div class="section-title">⚙️ أزرار التحكم وأدوات التحليل على الشارت</div>', unsafe_allow_html=True)
+st.markdown("اضغط على الأزرار أدناه لإظهار أو إخفاء خطوط الدعم، المقاومة، فيبوناتشي، والمؤشرات لحظياً على الرسم البياني:")
 
 (
     opt_col1,
@@ -1920,67 +1531,30 @@ st.markdown(
 opts = {}
 
 with opt_col1:
-
-    opts["ema20"] = st.checkbox(
-        "EMA 20",
-        value=True
-    )
-
+    opts["ema20"] = st.checkbox("EMA 20", value=True)
 with opt_col2:
-
-    opts["ema50"] = st.checkbox(
-        "EMA 50",
-        value=False
-    )
-
+    opts["ema50"] = st.checkbox("EMA 50", value=False)
 with opt_col3:
-
-    opts["ma200"] = st.checkbox(
-        "MA 200",
-        value=True
-    )
-
+    opts["ma200"] = st.checkbox("MA 200", value=True)
 with opt_col4:
-
-    opts["support"] = st.checkbox(
-        "الدعم والمقاومة",
-        value=True
-    )
-
+    opts["support"] = st.checkbox("🟢 خطوط الدعم", value=True)
 with opt_col5:
-
-    opts["fib"] = st.checkbox(
-        "فيبوناتشي",
-        value=False
-    )
-
+    opts["resistance"] = st.checkbox("🔴 خطوط المقاومة", value=True)
 with opt_col6:
-
-    opts["volume"] = st.checkbox(
-        "حجم التداول",
-        value=True
-    )
-
+    opts["fib"] = st.checkbox("📐 فيبوناتشي", value=False)
 with opt_col7:
-
-    opts["rsi"] = st.checkbox(
-        "مؤشر RSI",
-        value=True
-    )
+    opts["volume"] = st.checkbox("حجم التداول", value=True)
 
 
 # =====================================================================
 # CHART
 # =====================================================================
 
-chart_df = df.tail(
-    history_days
-).copy()
+chart_df = df.tail(history_days).copy()
+chart_df.attrs.update(df.attrs)
 
-# الحفاظ على metadata
-chart_df.attrs.update(
-    df.attrs
-)
+# تأكيد حالة RSI في الخيارات
+opts["rsi"] = True
 
 fig = build_chart(
     chart_df,
@@ -2009,42 +1583,33 @@ if analysis:
 
     with col_a:
 
-        st.subheader(
-            "🎯 التوصيات والأهداف الاستثمارية"
-        )
+        st.subheader("🎯 التوصيات والأهداف الاستثمارية")
 
         st.info(
             f"**منطقة الدخول المقترحة:** "
-            f"{analysis.get('ideal_entry', '—')} "
-            f"- "
-            f"{analysis.get('entry_high', '—')} "
-            f"ج.م"
+            f"{analysis.get('ideal_entry', '—')} - "
+            f"{analysis.get('entry_high', '—')} ج.م"
         )
 
         st.success(
             f"**الهدف الأول (TP1):** "
             f"{analysis.get('tp1', '—')} ج.م "
-            f"(المدة: "
-            f"{analysis.get('days_tp1_text', '—')})"
+            f"(المدة: {analysis.get('days_tp1_text', '—')})"
         )
 
         st.success(
             f"**الهدف الثاني (TP2):** "
             f"{analysis.get('tp2', '—')} ج.م "
-            f"(المدة: "
-            f"{analysis.get('days_tp2_text', '—')})"
+            f"(المدة: {analysis.get('days_tp2_text', '—')})"
         )
 
     with col_b:
 
-        st.subheader(
-            "🛑 إدارة المخاطر والخروج"
-        )
+        st.subheader("🛑 إدارة المخاطر والخروج")
 
         st.warning(
             f"**وقف الخسارة (Stop Loss):** "
-            f"{analysis.get('stop_loss', '—')} "
-            f"ج.م "
+            f"{analysis.get('stop_loss', '—')} ج.م "
             f"({fmt(analysis.get('stop_loss_pct'), 2, '%')})"
         )
 
@@ -2053,277 +1618,84 @@ if analysis:
             f"{analysis.get('exit_strategy', '—')}"
         )
 
-    st.subheader(
-        "💡 الأسباب والتحليل الفني التفصيلي:"
-    )
-
-    for reason in analysis.get(
-        "reasons",
-        []
-    ):
-
-        st.write(
-            f"- {reason}"
-        )
+    st.subheader("💡 الأسباب والتحليل الفني التفصيلي:")
+    for reason in analysis.get("reasons", []):
+        st.write(f"- {reason}")
 
 
 # =====================================================================
 # SUPPORT / RESISTANCE TABLE
 # =====================================================================
 
-st.markdown(
-    '<div class="section-title">'
-    '🎯 مستويات الدعم والمقاومة'
-    '</div>',
-    unsafe_allow_html=True
-)
-
+st.markdown('<div class="section-title">🎯 مستويات الدعم والمقاومة</div>', unsafe_allow_html=True)
 s_col, r_col = st.columns(2)
 
 with s_col:
-
-    st.subheader(
-        "🟢 الدعوم"
-    )
-
+    st.subheader("🟢 الدعوم")
     if supports:
-
         for level, touches in supports:
-
-            if current_price != 0:
-
-                dist = (
-                    (
-                        current_price
-                        - level
-                    )
-                    / current_price
-                    * 100
-                )
-
-            else:
-
-                dist = np.nan
-
-            st.write(
-                f"**{level:,.2f}** "
-                f"— المسافة "
-                f"{dist:.1f}% "
-                f"— لمسات: {touches}"
-            )
-
+            dist = ((current_price - level) / current_price * 100) if current_price != 0 else np.nan
+            st.write(f"**{level:,.2f}** — المسافة {dist:.1f}% — لمسات: {touches}")
     else:
-
-        st.write(
-            "لا توجد مستويات دعم كافية."
-        )
-
+        st.write("لا توجد مستويات دعم كافية.")
 
 with r_col:
-
-    st.subheader(
-        "🔴 المقاومات"
-    )
-
+    st.subheader("🔴 المقاومات")
     if resistances:
-
         for level, touches in resistances:
-
-            if current_price != 0:
-
-                dist = (
-                    (
-                        level
-                        - current_price
-                    )
-                    / current_price
-                    * 100
-                )
-
-            else:
-
-                dist = np.nan
-
-            st.write(
-                f"**{level:,.2f}** "
-                f"— المسافة "
-                f"{dist:.1f}% "
-                f"— لمسات: {touches}"
-            )
-
+            dist = ((level - current_price) / current_price * 100) if current_price != 0 else np.nan
+            st.write(f"**{level:,.2f}** — المسافة {dist:.1f}% — لمسات: {touches}")
     else:
-
-        st.write(
-            "لا توجد مستويات مقاومة كافية."
-        )
+        st.write("لا توجد مستويات مقاومة كافية.")
 
 
 # =====================================================================
 # SCENARIOS
 # =====================================================================
 
-st.markdown(
-    '<div class="section-title">'
-    '🔮 السيناريوهات الفنية'
-    '</div>',
-    unsafe_allow_html=True
-)
+st.markdown('<div class="section-title">🔮 السيناريوهات الفنية</div>', unsafe_allow_html=True)
 
-st.markdown(
-    "### 🟢 السيناريو الإيجابي"
-)
-
+st.markdown("### 🟢 السيناريو الإيجابي")
 if resistances:
-
-    nxt = (
-        f" ثم المقاومة التالية "
-        f"**{resistances[1][0]:,.2f}**"
-        if len(resistances) > 1
-        else ""
-    )
-
-    st.write(
-        f"اختراق المقاومة الأقرب "
-        f"**{resistances[0][0]:,.2f}** "
-        f"بإغلاق واضح والثبات فوقها، "
-        f"تتم مراقبة"
-        f"{nxt or ' المستويات الأعلى'}."
-    )
-
+    nxt = f" ثم المقاومة التالية **{resistances[1][0]:,.2f}**" if len(resistances) > 1 else ""
+    st.write(f"اختراق المقاومة الأقرب **{resistances[0][0]:,.2f}** بإغلاق واضح والثبات فوقها، تتم مراقبة{nxt or ' المستويات الأعلى'}.")
 else:
+    st.write("لا توجد مقاومة آلية كافية.")
 
-    st.write(
-        "لا توجد مقاومة آلية كافية."
-    )
-
-
-st.markdown(
-    "### 🔴 السيناريو السلبي"
-)
-
+st.markdown("### 🔴 السيناريو السلبي")
 if supports:
-
-    st.write(
-        f"كسر الدعم الأقرب "
-        f"**{supports[0][0]:,.2f}** "
-        f"بإغلاق واضح يستدعي "
-        f"إعادة تقييم الاتجاه."
-    )
-
+    st.write(f"كسر الدعم الأقرب **{supports[0][0]:,.2f}** بإغلاق واضح يستدعي إعادة تقييم الاتجاه.")
 else:
-
-    st.write(
-        "لا يوجد دعم آلي كافٍ."
-    )
+    st.write("لا يوجد دعم آلي كافٍ.")
 
 
 # =====================================================================
 # INDICATORS TABLE
 # =====================================================================
 
-st.markdown(
-    '<div class="section-title">'
-    '📌 المؤشرات الفنية'
-    '</div>',
-    unsafe_allow_html=True
-)
+st.markdown('<div class="section-title">📌 المؤشرات الفنية</div>', unsafe_allow_html=True)
 
 indicator_rows = [
-
-    (
-        "السعر الحالي",
-        current_price,
-        2
-    ),
-
-    (
-        "آخر إغلاق Yahoo",
-        historical_close,
-        2
-    ),
-
-    (
-        "EMA 20",
-        last.get("EMA_20"),
-        2
-    ),
-
-    (
-        "EMA 50",
-        last.get("EMA_50"),
-        2
-    ),
-
-    (
-        "MA 200",
-        last.get("MA_200"),
-        2
-    ),
-
-    (
-        "RSI 14",
-        rsi,
-        1
-    ),
-
-    (
-        "MACD",
-        last.get("MACD"),
-        4
-    ),
-
-    (
-        "MACD Signal",
-        last.get("MACD_Signal"),
-        4
-    ),
-
-    (
-        "ATR 14",
-        last.get("ATR14"),
-        3
-    ),
-
-    (
-        "نسبة الحجم",
-        volume_ratio,
-        2
-    ),
-
-    (
-        "عائد 5 جلسات %",
-        last.get("Return_5D"),
-        2
-    ),
-
-    (
-        "عائد 20 جلسة %",
-        last.get("Return_20D"),
-        2
-    ),
+    ("السعر الحالي", current_price, 2),
+    ("آخر إغلاق Yahoo", historical_close, 2),
+    ("EMA 20", last.get("EMA_20"), 2),
+    ("EMA 50", last.get("EMA_50"), 2),
+    ("MA 200", last.get("MA_200"), 2),
+    ("RSI 14", rsi, 1),
+    ("MACD", last.get("MACD"), 4),
+    ("MACD Signal", last.get("MACD_Signal"), 4),
+    ("ATR 14", last.get("ATR14"), 3),
+    ("نسبة الحجم", volume_ratio, 2),
+    ("عائد 5 جلسات %", last.get("Return_5D"), 2),
+    ("عائد 20 جلسة %", last.get("Return_20D"), 2),
 ]
 
 st.dataframe(
-
     pd.DataFrame({
-
-        "المؤشر": [
-            r[0]
-            for r in indicator_rows
-        ],
-
-        "القيمة": [
-            fmt(
-                r[1],
-                r[2]
-            )
-            for r in indicator_rows
-        ],
-
+        "المؤشر": [r[0] for r in indicator_rows],
+        "القيمة": [fmt(r[1], r[2]) for r in indicator_rows],
     }),
-
     use_container_width=True,
-
     hide_index=True,
 )
 
@@ -2332,51 +1704,17 @@ st.dataframe(
 # HISTORICAL DATA
 # =====================================================================
 
-with st.expander(
-    "📋 عرض البيانات التاريخية"
-):
-
+with st.expander("📋 عرض البيانات التاريخية"):
     cols = [
-
-        c
-
-        for c in [
-
-            "Open",
-            "High",
-            "Low",
-            "Close",
-            "Volume",
-
-            "EMA_20",
-            "EMA_50",
-            "MA_200",
-
-            "RSI_14",
-
-            "MACD",
-            "MACD_Signal",
-
-            "ATR14",
-
-            "Volume_Ratio",
-
+        c for c in [
+            "Open", "High", "Low", "Close", "Volume",
+            "EMA_20", "EMA_50", "MA_200", "RSI_14",
+            "MACD", "MACD_Signal", "ATR14", "Volume_Ratio",
         ]
-
         if c in df.columns
-
     ]
-
     st.dataframe(
-
-        df[
-            cols
-        ]
-        .tail(100)
-        .sort_index(
-            ascending=False
-        ),
-
+        df[cols].tail(100).sort_index(ascending=False),
         use_container_width=True,
     )
 
@@ -2386,7 +1724,6 @@ with st.expander(
 # =====================================================================
 
 st.markdown("---")
-
 st.caption(
     "⚠️ هذه اللوحة أداة مساعدة للتحليل الفني فقط، "
     "وما تعرضه من توصيات وأهداف ليس نصيحة استثمارية. "
