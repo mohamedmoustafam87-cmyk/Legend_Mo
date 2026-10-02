@@ -1,7 +1,7 @@
 # ============================================================
 # legend-Mo LENS
 # EGX Technical Intelligence Dashboard
-# Premium Black Edition (Arabic)
+# Premium Black Edition (Arabic Fixed)
 # ============================================================
 
 import streamlit as st
@@ -36,7 +36,7 @@ st.set_page_config(
 
 
 # ============================================================
-# PREMIUM BLACK CSS (RTL & ARABIC SUPPORT)
+# PREMIUM BLACK CSS (RTL & HORIZONTAL TEXT FIX)
 # ============================================================
 
 st.markdown(
@@ -57,6 +57,7 @@ html, body, [class*="css"] {
         radial-gradient(circle at 85% 20%, rgba(0,255,170,0.025), transparent 25%),
         #050607;
     color: #F5F7FA;
+    direction: rtl;
 }
 
 .block-container {
@@ -98,12 +99,13 @@ h1, h2, h3, h4 {
         0 8px 30px rgba(0,0,0,0.28),
         inset 0 1px 0 rgba(255,255,255,0.015);
     text-align: right;
+    direction: rtl;
 }
 
 .brand {
     font-size: 30px;
     font-weight: 800;
-    letter-spacing: -1px;
+    letter-spacing: normal;
 }
 
 .brand span {
@@ -113,7 +115,7 @@ h1, h2, h3, h4 {
 .brand-sub {
     color: #737B86;
     font-size: 12px;
-    letter-spacing: 2px;
+    letter-spacing: normal;
     margin-top: -4px;
 }
 
@@ -121,7 +123,6 @@ h1, h2, h3, h4 {
     color: #727A84;
     font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 1.3px;
     font-weight: 600;
 }
 
@@ -170,7 +171,6 @@ h1, h2, h3, h4 {
 .score-label {
     color: #858D98;
     font-size: 11px;
-    letter-spacing: 2px;
 }
 
 .progress-bg {
@@ -198,6 +198,7 @@ h1, h2, h3, h4 {
     border-radius: 12px;
     padding: 13px;
     text-align: right;
+    direction: rtl;
 }
 
 .scenario-title {
@@ -218,6 +219,7 @@ h1, h2, h3, h4 {
     background: #0B0E11;
     border: 1px solid #1B2026;
     text-align: right;
+    direction: rtl;
 }
 
 .signal-title {
@@ -243,7 +245,6 @@ h1, h2, h3, h4 {
     color: #454C55;
     font-size: 11px;
     padding: 25px 0 10px 0;
-    letter-spacing: 1px;
 }
 
 .stButton > button {
@@ -701,7 +702,7 @@ def load_analysis(symbol, mubasher_prices):
 
 st.markdown(
     """
-<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:20px;">
+<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:20px;direction:rtl;">
 <div>
     <div class="brand">legend-Mo <span>LENS</span></div>
     <div class="brand-sub">التحليل الذكي للأسهم المصرية</div>
@@ -721,7 +722,7 @@ st.markdown(
 # ============================================================
 
 with st.sidebar:
-    st.markdown('<div style="font-size:20px;font-weight:800;margin-bottom:15px;">🖤 legend-Mo</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:20px;font-weight:800;margin-bottom:15px;direction:rtl;">🖤 legend-Mo</div>', unsafe_allow_html=True)
     st.markdown("### السوق")
 
     try:
@@ -789,7 +790,7 @@ recommendation = analysis.get("recommendation", "حيادي")
 st.markdown(
     f"""
 <div class="lm-card">
-<div style="display:flex;justify-content:space-between;align-items:center;">
+<div style="display:flex;justify-content:space-between;align-items:center;direction:rtl;">
 <div>
 <div class="label">أسهم البورصة المصرية</div>
 <div style="font-size:34px;font-weight:800;margin-top:4px;">{symbol}</div>
@@ -804,7 +805,7 @@ st.markdown(
 </div>
 </div>
 <div class="divider"></div>
-<div style="display:flex;justify-content:space-between;align-items:center;">
+<div style="display:flex;justify-content:space-between;align-items:center;direction:rtl;">
 <div><span class="label">مصدر السعر</span><br><span style="font-size:12px;color:#B8BEC6;">{source} {' • مباشر' if realtime else ' • إغلاق سابق'}</span></div>
 <div><span class="label">إغلاق تاريخي</span><br><span style="font-size:12px;color:#B8BEC6;">{fmt(historical_close)}</span></div>
 <div><span class="label">الاتجاه العام</span><br><span class="yellow" style="font-size:13px;font-weight:700;">{trend}</span></div>
