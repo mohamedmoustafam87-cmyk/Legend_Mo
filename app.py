@@ -1,7 +1,7 @@
 # ============================================================
 # legend-Mo LENS
 # EGX Technical Intelligence Dashboard
-# Premium Black Edition (Robust Data Fix)
+# Premium Black Edition (Arabic)
 # ============================================================
 
 import streamlit as st
@@ -36,17 +36,19 @@ st.set_page_config(
 
 
 # ============================================================
-# PREMIUM BLACK CSS
+# PREMIUM BLACK CSS (RTL & ARABIC SUPPORT)
 # ============================================================
 
 st.markdown(
     """
 <style>
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
 
 html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Cairo', sans-serif;
+    direction: rtl;
+    text-align: right;
 }
 
 .stApp {
@@ -61,19 +63,25 @@ html, body, [class*="css"] {
     padding-top: 1.2rem;
     padding-bottom: 2rem;
     max-width: 1600px;
+    direction: rtl;
 }
 
 section[data-testid="stSidebar"] {
     background: #080A0C;
-    border-right: 1px solid #181C21;
+    border-left: 1px solid #181C21;
+    border-right: none;
+    direction: rtl;
 }
 
 section[data-testid="stSidebar"] * {
     color: #E8EBEF;
+    direction: rtl;
+    text-align: right;
 }
 
 h1, h2, h3, h4 {
     color: #F7F8FA !important;
+    text-align: right;
 }
 
 .lm-card {
@@ -89,6 +97,7 @@ h1, h2, h3, h4 {
     box-shadow:
         0 8px 30px rgba(0,0,0,0.28),
         inset 0 1px 0 rgba(255,255,255,0.015);
+    text-align: right;
 }
 
 .brand {
@@ -188,12 +197,13 @@ h1, h2, h3, h4 {
     border: 1px solid #1A1F25;
     border-radius: 12px;
     padding: 13px;
+    text-align: right;
 }
 
 .scenario-title {
     color: #818995;
-    font-size: 10px;
-    letter-spacing: 1px;
+    font-size: 11px;
+    font-weight: bold;
 }
 
 .scenario-value {
@@ -207,12 +217,13 @@ h1, h2, h3, h4 {
     border-radius: 12px;
     background: #0B0E11;
     border: 1px solid #1B2026;
+    text-align: right;
 }
 
 .signal-title {
     color: #777F89;
-    font-size: 10px;
-    letter-spacing: 1px;
+    font-size: 11px;
+    font-weight: bold;
 }
 
 .signal-value {
@@ -230,7 +241,7 @@ h1, h2, h3, h4 {
 .footer {
     text-align: center;
     color: #454C55;
-    font-size: 10px;
+    font-size: 11px;
     padding: 25px 0 10px 0;
     letter-spacing: 1px;
 }
@@ -240,6 +251,7 @@ h1, h2, h3, h4 {
     color: #DDE1E6;
     border: 1px solid #242A31;
     border-radius: 10px;
+    font-family: 'Cairo', sans-serif;
 }
 
 .stButton > button:hover {
@@ -302,14 +314,14 @@ def score_color(score):
 def score_text(score):
     score = safe_float(score, 0)
     if score >= 80:
-        return "Very Strong"
+        return "قوي جداً"
     if score >= 70:
-        return "Strong"
+        return "قوي"
     if score >= 60:
-        return "Positive"
+        return "إيجابي"
     if score >= 50:
-        return "Neutral"
-    return "Weak"
+        return "حيادي"
+    return "ضعيف"
 
 
 def normalize_score(value, maximum):
@@ -398,12 +410,12 @@ def calculate_selling_pressure(df):
 
 
 # ============================================================
-# TREND DESCRIPTION
+# TREND DESCRIPTION (ARABIC)
 # ============================================================
 
 def trend_description(df):
     if df is None or df.empty:
-        return "Unknown"
+        return "غير محدد"
 
     row = df.iloc[-1]
     price = safe_float(row.get("Close"))
@@ -427,10 +439,10 @@ def trend_description(df):
         bearish += price < ma200
 
     if bullish >= 3:
-        return "Bullish"
+        return "صاعد 📈"
     if bearish >= 2:
-        return "Bearish"
-    return "Mixed"
+        return "هابط 📉"
+    return "متذبذب / عرضي 🔄"
 
 
 # ============================================================
@@ -496,7 +508,7 @@ def build_chart(
             x=data.index, open=data["Open"], high=data["High"],
             low=data["Low"], close=data["Close"],
             increasing_line_color="#00E676", decreasing_line_color="#FF4D5A",
-            name="Price",
+            name="السعر",
         ),
         row=1, col=1,
     )
@@ -508,29 +520,29 @@ def build_chart(
 
     if show_bollinger:
         if "BB_UPPER" in data.columns:
-            fig.add_trace(go.Scatter(x=data.index, y=data["BB_UPPER"], mode="lines", name="BB Upper", line=dict(width=1, dash="dot")), row=1, col=1)
+            fig.add_trace(go.Scatter(x=data.index, y=data["BB_UPPER"], mode="lines", name="البولنجر العلوي", line=dict(width=1, dash="dot")), row=1, col=1)
         if "BB_LOWER" in data.columns:
-            fig.add_trace(go.Scatter(x=data.index, y=data["BB_LOWER"], mode="lines", name="BB Lower", line=dict(width=1, dash="dot")), row=1, col=1)
+            fig.add_trace(go.Scatter(x=data.index, y=data["BB_LOWER"], mode="lines", name="البولنجر السفلي", line=dict(width=1, dash="dot")), row=1, col=1)
 
     price = float(data["Close"].iloc[-1])
     support, resistance = get_basic_levels(data)
 
     if show_sr:
         if not pd.isna(support):
-            fig.add_hline(y=support, line_dash="dot", line_width=1, annotation_text=f"Support {support:.2f}", annotation_position="bottom left", row=1, col=1)
+            fig.add_hline(y=support, line_dash="dot", line_width=1, annotation_text=f"دعم {support:.2f}", annotation_position="bottom left", row=1, col=1)
         if not pd.isna(resistance):
-            fig.add_hline(y=resistance, line_dash="dot", line_width=1, annotation_text=f"Resistance {resistance:.2f}", annotation_position="top left", row=1, col=1)
+            fig.add_hline(y=resistance, line_dash="dot", line_width=1, annotation_text=f"مقاومة {resistance:.2f}", annotation_position="top left", row=1, col=1)
 
     if show_rolling:
         for n in [20, 50]:
             high = data["High"].rolling(n).max().iloc[-1]
             low = data["Low"].rolling(n).min().iloc[-1]
-            if not pd.isna(high): fig.add_hline(y=high, line_dash="dot", line_width=0.8, annotation_text=f"{n}D High", row=1, col=1)
-            if not pd.isna(low): fig.add_hline(y=low, line_dash="dot", line_width=0.8, annotation_text=f"{n}D Low", row=1, col=1)
+            if not pd.isna(high): fig.add_hline(y=high, line_dash="dot", line_width=0.8, annotation_text=f"قمه {n} جلسة", row=1, col=1)
+            if not pd.isna(low): fig.add_hline(y=low, line_dash="dot", line_width=0.8, annotation_text=f"قاع {n} جلسة", row=1, col=1)
 
     if show_previous and len(data) >= 2:
         previous = data.iloc[-2]
-        for level, label in [(previous["High"], "Prev High"), (previous["Low"], "Prev Low")]:
+        for level, label in [(previous["High"], "أعلى جلسة سابقة"), (previous["Low"], "أدنى جلسة سابقة")]:
             fig.add_hline(y=level, line_dash="dash", line_width=1, annotation_text=label, row=1, col=1)
 
     if show_fib:
@@ -540,14 +552,14 @@ def build_chart(
         if diff > 0:
             for ratio in [0.236, 0.382, 0.5, 0.618, 0.786]:
                 level = swing_high - diff * ratio
-                fig.add_hline(y=level, line_dash="dot", line_width=0.7, annotation_text=f"Fib {ratio:.3f}", row=1, col=1)
+                fig.add_hline(y=level, line_dash="dot", line_width=0.7, annotation_text=f"فيبو {ratio * 100:.1f}%", row=1, col=1)
 
     if show_pivot and len(data) >= 2:
         prev = data.iloc[-2]
         pp = (prev["High"] + prev["Low"] + prev["Close"]) / 3
         r1, s1 = 2 * pp - prev["Low"], 2 * pp - prev["High"]
         r2, s2 = pp + (prev["High"] - prev["Low"]), pp - (prev["High"] - prev["Low"])
-        for level, label in [(pp, "Pivot"), (r1, "R1"), (r2, "R2"), (s1, "S1"), (s2, "S2")]:
+        for level, label in [(pp, "الارتكاز Pivot"), (r1, "مقاومة R1"), (r2, "مقاومة R2"), (s1, "دعم S1"), (s2, "دعم S2")]:
             fig.add_hline(y=level, line_dash="dot", line_width=0.7, annotation_text=label, row=1, col=1)
 
     if show_atr and "ATR14" in data.columns:
@@ -558,11 +570,11 @@ def build_chart(
             for m, lbl in [(1, "ATR +1"), (2, "ATR +2")]:
                 fig.add_hline(y=price + atr * m, line_dash="dash", line_width=0.8, annotation_text=lbl, row=1, col=1)
 
-    fig.add_hline(y=price, line_dash="solid", line_width=1.2, annotation_text=f"Historical Close {price:.2f}", annotation_position="top right", row=1, col=1)
+    fig.add_hline(y=price, line_dash="solid", line_width=1.2, annotation_text=f"الإغلاق الحالي {price:.2f}", annotation_position="top right", row=1, col=1)
 
     current_row = 2
     if show_volume:
-        fig.add_trace(go.Bar(x=data.index, y=data["Volume"], name="Volume", opacity=0.55), row=current_row, col=1)
+        fig.add_trace(go.Bar(x=data.index, y=data["Volume"], name="حجم التداول", opacity=0.55), row=current_row, col=1)
         current_row += 1
 
     if show_rsi and "RSI14" in data.columns:
@@ -573,9 +585,9 @@ def build_chart(
     fig.update_layout(
         height=750, template="plotly_dark",
         paper_bgcolor="#050607", plot_bgcolor="#080A0C",
-        font=dict(color="#DDE2E8", size=11),
+        font=dict(color="#DDE2E8", size=11, family="Cairo"),
         margin=dict(l=10, r=10, t=35, b=10),
-        legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="left", x=0, bgcolor="rgba(0,0,0,0)"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="right", x=1, bgcolor="rgba(0,0,0,0)"),
         xaxis_rangeslider_visible=False, hovermode="x unified",
     )
     fig.update_xaxes(showgrid=True, gridcolor="#15191E", zeroline=False)
@@ -588,7 +600,7 @@ def build_chart(
 # ============================================================
 
 def build_radar(analysis):
-    categories = ["Trend", "Momentum", "Volume", "Price Action", "Money Flow", "Volatility", "Strength"]
+    categories = ["الاتجاه", "الزخم", "الحجم", "السعر", "تدفق السيولة", "التقلبات", "القوة"]
     values = [
         normalize_score(analysis.get("trend_score"), 20),
         normalize_score(analysis.get("momentum_score"), 15),
@@ -609,7 +621,7 @@ def build_radar(analysis):
         polar=dict(
             bgcolor="#0A0D10",
             radialaxis=dict(visible=True, range=[0, 100], gridcolor="#252B32", linecolor="#252B32", tickfont=dict(color="#646C76", size=8)),
-            angularaxis=dict(gridcolor="#252B32", linecolor="#252B32", tickfont=dict(color="#9BA2AB", size=9)),
+            angularaxis=dict(gridcolor="#252B32", linecolor="#252B32", tickfont=dict(color="#9BA2AB", size=10, family="Cairo")),
         ),
         showlegend=False,
     )
@@ -617,7 +629,7 @@ def build_radar(analysis):
 
 
 # ============================================================
-# LOAD ANALYSIS (Enhanced Robust Handling)
+# LOAD ANALYSIS
 # ============================================================
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -638,7 +650,7 @@ def load_analysis(symbol, mubasher_prices):
         df, source = result
     else:
         df = result
-        source = "Unknown"
+        source = "غير معروف"
 
     if df is None or not isinstance(df, pd.DataFrame) or df.empty:
         return None, None
@@ -660,10 +672,9 @@ def load_analysis(symbol, mubasher_prices):
         analysis = None
 
     if analysis is None:
-        # Fallback default analysis dictionary if strategy returns None
         analysis = {
             "score": 50,
-            "recommendation": "Neutral",
+            "recommendation": "حيادي",
             "trend_score": 10,
             "momentum_score": 7,
             "volume_score": 7,
@@ -693,11 +704,11 @@ st.markdown(
 <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:20px;">
 <div>
     <div class="brand">legend-Mo <span>LENS</span></div>
-    <div class="brand-sub">EGX TECHNICAL INTELLIGENCE</div>
+    <div class="brand-sub">التحليل الذكي للأسهم المصرية</div>
 </div>
-<div style="text-align:right;">
-    <div class="label">ANALYTICAL ENGINE</div>
-    <div style="font-size:13px;color:#B6BDC6;">Technical • Momentum • Flow • Risk</div>
+<div style="text-align:left;">
+    <div class="label">محرك التحليل الفني</div>
+    <div style="font-size:13px;color:#B6BDC6;">الزخم • السيولة • المخاطرة</div>
 </div>
 </div>
 """,
@@ -711,7 +722,7 @@ st.markdown(
 
 with st.sidebar:
     st.markdown('<div style="font-size:20px;font-weight:800;margin-bottom:15px;">🖤 legend-Mo</div>', unsafe_allow_html=True)
-    st.markdown("### Market")
+    st.markdown("### السوق")
 
     try:
         from config import EGX_STOCKS
@@ -719,26 +730,26 @@ with st.sidebar:
     except Exception:
         stock_list = ["COMI", "SWDY", "EFIH", "FWRY", "TMGH"]
 
-    symbol = st.selectbox("Select Stock", stock_list, index=0)
+    symbol = st.selectbox("اختر السهم", stock_list, index=0)
     st.markdown("---")
 
-    history_days = st.slider("Chart History", min_value=30, max_value=300, value=120, step=10)
+    history_days = st.slider("عدد جلسات الشارت", min_value=30, max_value=300, value=120, step=10)
 
-    st.markdown("### Chart Tools")
-    show_sr = st.toggle("Support / Resistance", value=True)
-    show_swing = st.toggle("Swing High / Low", value=False)
-    show_rolling = st.toggle("20D / 50D High-Low", value=False)
-    show_previous = st.toggle("Previous High / Low", value=False)
-    show_fib = st.toggle("Fibonacci", value=False)
-    show_pivot = st.toggle("Pivot Points", value=False)
-    show_atr = st.toggle("ATR Zones", value=False)
-    show_ema = st.toggle("EMA 20 / 50 / MA 200", value=True)
-    show_bollinger = st.toggle("Bollinger Bands", value=False)
-    show_volume = st.toggle("Volume", value=True)
-    show_rsi = st.toggle("RSI", value=False)
+    st.markdown("### أدوات الشارت")
+    show_sr = st.toggle("الدعم والمقاومة", value=True)
+    show_swing = st.toggle("قمم وقيعان (Swing)", value=False)
+    show_rolling = st.toggle("قمه/قاع 20 و 50 جلسة", value=False)
+    show_previous = st.toggle("مستويات الجلسة السابقة", value=False)
+    show_fib = st.toggle("فيبوناتشي", value=False)
+    show_pivot = st.toggle("نقاط الارتكاز (Pivot)", value=False)
+    show_atr = st.toggle("مستويات ATR", value=False)
+    show_ema = st.toggle("المتوسطات (EMA 20/50 & MA 200)", value=True)
+    show_bollinger = st.toggle("بولنجر باند", value=False)
+    show_volume = st.toggle("حجم التداول", value=True)
+    show_rsi = st.toggle("مؤشر RSI", value=False)
 
     st.markdown("---")
-    if st.button("🔄 Refresh Data", use_container_width=True):
+    if st.button("🔄 تحديث البيانات", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
 
@@ -747,12 +758,12 @@ with st.sidebar:
 # LOAD
 # ============================================================
 
-with st.spinner("Loading market intelligence..."):
+with st.spinner("جاري تحميل بيانات الذكاء الاصطناعي للسوق..."):
     try:
         mubasher_prices = load_market_prices()
         df, analysis = load_analysis(symbol, mubasher_prices)
     except Exception as e:
-        st.error(f"Data error: {e}")
+        st.error(f"خطأ في البيانات: {e}")
         st.stop()
 
 if df is None or analysis is None:
@@ -773,19 +784,19 @@ realtime = bool(analysis.get("is_realtime", False))
 trend = trend_description(df)
 score = clamp(analysis.get("score", 0))
 score_class = score_color(score)
-recommendation = analysis.get("recommendation", "—")
+recommendation = analysis.get("recommendation", "حيادي")
 
 st.markdown(
     f"""
 <div class="lm-card">
 <div style="display:flex;justify-content:space-between;align-items:center;">
 <div>
-<div class="label">EGX EQUITY</div>
+<div class="label">أسهم البورصة المصرية</div>
 <div style="font-size:34px;font-weight:800;margin-top:4px;">{symbol}</div>
-<div style="color:#707883;font-size:11px;margin-top:4px;">legend-Mo Lens Analysis</div>
+<div style="color:#707883;font-size:11px;margin-top:4px;">تحليل مخصص عبر LENS</div>
 </div>
-<div style="text-align:right;">
-<div class="label">CURRENT PRICE</div>
+<div style="text-align:left;">
+<div class="label">السعر الحالي</div>
 <div class="big-value">{fmt(current_price)}</div>
 <div class="{('green' if change_pct >= 0 else 'red')}" style="font-size:13px;font-weight:700;margin-top:5px;">
 {'▲' if change_pct >= 0 else '▼'} {pct(abs(change_pct))}
@@ -794,10 +805,10 @@ st.markdown(
 </div>
 <div class="divider"></div>
 <div style="display:flex;justify-content:space-between;align-items:center;">
-<div><span class="label">PRICE SOURCE</span><br><span style="font-size:12px;color:#B8BEC6;">{source} {' • LIVE' if realtime else ' • FALLBACK'}</span></div>
-<div><span class="label">HISTORICAL CLOSE</span><br><span style="font-size:12px;color:#B8BEC6;">{fmt(historical_close)}</span></div>
-<div><span class="label">TREND</span><br><span class="{('green' if trend == 'Bullish' else 'red' if trend == 'Bearish' else 'yellow')}" style="font-size:13px;font-weight:700;">{trend}</span></div>
-<div><span class="label">SIGNAL</span><br><span style="font-size:13px;font-weight:700;color:#EDEFF2;">{recommendation}</span></div>
+<div><span class="label">مصدر السعر</span><br><span style="font-size:12px;color:#B8BEC6;">{source} {' • مباشر' if realtime else ' • إغلاق سابق'}</span></div>
+<div><span class="label">إغلاق تاريخي</span><br><span style="font-size:12px;color:#B8BEC6;">{fmt(historical_close)}</span></div>
+<div><span class="label">الاتجاه العام</span><br><span class="yellow" style="font-size:13px;font-weight:700;">{trend}</span></div>
+<div><span class="label">التوصية الإشارية</span><br><span style="font-size:13px;font-weight:700;color:#EDEFF2;">{recommendation}</span></div>
 </div>
 </div>
 """,
@@ -815,7 +826,7 @@ with col1:
     st.markdown(
         f"""
         <div class="lm-card" style="height:145px;">
-        <div class="score-label">LEGEND-MO SCORE</div>
+        <div class="score-label">تقييم LENS الشامل</div>
         <div class="score-number {score_class}">{score:.0f}</div>
         <div style="color:#737B85;font-size:11px;margin-top:7px;">/ 100 • {score_text(score)}</div>
         <div class="progress-bg"><div class="progress-fill" style="width:{score:.0f}%;"></div></div>
@@ -826,40 +837,40 @@ with col1:
 
 with col2:
     rsi = safe_float(df["RSI14"].iloc[-1] if "RSI14" in df.columns else np.nan)
-    st.markdown(f"""<div class="lm-card" style="height:145px;"><div class="label">RSI 14</div><div class="metric-value">{fmt(rsi,1)}</div><div class="metric-sub">Momentum</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="lm-card" style="height:145px;"><div class="label">مؤشر القوة (RSI 14)</div><div class="metric-value">{fmt(rsi,1)}</div><div class="metric-sub">الزخم الفني</div></div>""", unsafe_allow_html=True)
 
 with col3:
     adx = safe_float(df["ADX14"].iloc[-1] if "ADX14" in df.columns else np.nan)
-    st.markdown(f"""<div class="lm-card" style="height:145px;"><div class="label">ADX</div><div class="metric-value">{fmt(adx,1)}</div><div class="metric-sub">Trend Strength</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="lm-card" style="height:145px;"><div class="label">قوة الاتجاه (ADX)</div><div class="metric-value">{fmt(adx,1)}</div><div class="metric-sub">مقياس الاتجاه</div></div>""", unsafe_allow_html=True)
 
 with col4:
     volume_ratio = safe_float(df["Volume_Ratio"].iloc[-1] if "Volume_Ratio" in df.columns else np.nan)
-    st.markdown(f"""<div class="lm-card" style="height:145px;"><div class="label">VOLUME RATIO</div><div class="metric-value">{fmt(volume_ratio,2)}x</div><div class="metric-sub">Trading Activity</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="lm-card" style="height:145px;"><div class="label">معدل حجم التداول</div><div class="metric-value">{fmt(volume_ratio,2)}x</div><div class="metric-sub">نشاط السوق</div></div>""", unsafe_allow_html=True)
 
 with col5:
     atr = safe_float(df["ATR14"].iloc[-1] if "ATR14" in df.columns else np.nan)
     atr_pct = (atr / historical_close * 100) if historical_close and not pd.isna(atr) else np.nan
-    st.markdown(f"""<div class="lm-card" style="height:145px;"><div class="label">ATR %</div><div class="metric-value">{fmt(atr_pct,2)}%</div><div class="metric-sub">Volatility</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="lm-card" style="height:145px;"><div class="label">معدل التذبذب (ATR %)</div><div class="metric-value">{fmt(atr_pct,2)}%</div><div class="metric-sub">قياس المخاطر</div></div>""", unsafe_allow_html=True)
 
 
 # ============================================================
 # SCORE BREAKDOWN & RADAR
 # ============================================================
 
-st.markdown("## Score Intelligence")
+st.markdown("## تحليل تفصيل النقاط")
 left, right = st.columns([1.2, 1])
 
 with left:
-    st.markdown('<div class="lm-card"><div class="label">LEGEND-MO SCORE BREAKDOWN</div><div style="height:10px;"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="lm-card"><div class="label">مكونات تقييم LENS</div><div style="height:10px;"></div>', unsafe_allow_html=True)
     breakdown = {
-        "Trend": (analysis.get("trend_score", 0), 20),
-        "Momentum": (analysis.get("momentum_score", 0), 15),
-        "Volume": (analysis.get("volume_score", 0), 15),
-        "Price Action": (analysis.get("price_action_score", 0), 15),
-        "Support / Resistance": (analysis.get("sr_score", 0), 15),
-        "Money Flow": (analysis.get("money_flow_score", 0), 10),
-        "Volatility": (analysis.get("volatility_score", 0), 5),
-        "Price Strength": (analysis.get("price_strength_score", 0), 5),
+        "الاتجاه": (analysis.get("trend_score", 0), 20),
+        "الزخم": (analysis.get("momentum_score", 0), 15),
+        "حجم التداول": (analysis.get("volume_score", 0), 15),
+        "حركة السعر": (analysis.get("price_action_score", 0), 15),
+        "الدعم والمقاومة": (analysis.get("sr_score", 0), 15),
+        "تدفق السيولة": (analysis.get("money_flow_score", 0), 10),
+        "التقلبات": (analysis.get("volatility_score", 0), 5),
+        "قوة السعر": (analysis.get("price_strength_score", 0), 5),
     }
 
     for name, (value, maximum) in breakdown.items():
@@ -880,7 +891,7 @@ with left:
     st.markdown("</div>", unsafe_allow_html=True)
 
 with right:
-    st.markdown('<div class="lm-card"><div class="label">TECHNICAL RADAR</div>', unsafe_allow_html=True)
+    st.markdown('<div class="lm-card"><div class="label">الرادار الفني المتقدم</div>', unsafe_allow_html=True)
     st.plotly_chart(build_radar(analysis), use_container_width=True, config={"displayModeBar": False})
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -890,10 +901,10 @@ with right:
 # ============================================================
 
 scenarios = calculate_scenarios(analysis)
-st.markdown("## Market Scenario")
+st.markdown("## سيناريوهات الحركة المتوقعة")
 c1, c2, c3 = st.columns(3)
 
-for col, title, value, cls in [(c1, "BULLISH", scenarios["Bullish"], "green"), (c2, "SIDEWAYS", scenarios["Sideways"], "yellow"), (c3, "BEARISH", scenarios["Bearish"], "red")]:
+for col, title, value, cls in [(c1, "صاعد (Bullish)", scenarios["Bullish"], "green"), (c2, "عرضي (Sideways)", scenarios["Sideways"], "yellow"), (c3, "هابط (Bearish)", scenarios["Bearish"], "red")]:
     with col:
         st.markdown(
             f"""
@@ -911,7 +922,7 @@ for col, title, value, cls in [(c1, "BULLISH", scenarios["Bullish"], "green"), (
 # PRICE CHART
 # ============================================================
 
-st.markdown("## Price Action Lab")
+st.markdown("## معمل الشارت وحركة الأسعار")
 chart = build_chart(
     df=df, history_days=history_days, show_sr=show_sr, show_swing=show_swing,
     show_rolling=show_rolling, show_previous=show_previous, show_fib=show_fib,
@@ -925,4 +936,4 @@ st.plotly_chart(chart, use_container_width=True, config={"displaylogo": False, "
 # FOOTER
 # ============================================================
 
-st.markdown("""<div class="footer">legend-Mo LENS • EGX TECHNICAL INTELLIGENCE<br>Developed by legend-Mo</div>""", unsafe_allow_html=True)
+st.markdown("""<div class="footer">legend-Mo LENS • نظام التحليل الذكي للبورصة المصرية<br>تم التطوير بواسطة محمد مصطفى (legend-Mo)</div>""", unsafe_allow_html=True)
