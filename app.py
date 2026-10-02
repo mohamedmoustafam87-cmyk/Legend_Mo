@@ -1,7 +1,7 @@
 # ============================================================
 # legend-Mo LENS
 # EGX Technical Intelligence Dashboard
-# Premium Black Edition (Final Layout Fix)
+# Premium Black Edition (Absolute Horizontal Text Fix)
 # ============================================================
 
 import streamlit as st
@@ -36,7 +36,7 @@ st.set_page_config(
 
 
 # ============================================================
-# PREMIUM BLACK CSS (FORCED HORIZONTAL TEXT FIX)
+# PREMIUM BLACK CSS (ABSOLUTE HORIZONTAL FIX)
 # ============================================================
 
 st.markdown(
@@ -49,6 +49,13 @@ html, body, [class*="css"] {
     font-family: 'Cairo', sans-serif;
     direction: rtl;
     text-align: right;
+}
+
+/* Force all text elements to stay horizontal and prevent vertical stacking */
+div, span, p, h1, h2, h3, h4, label, a {
+    writing-mode: horizontal-tb !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
 }
 
 .stApp {
@@ -83,13 +90,7 @@ section[data-testid="stSidebar"] * {
 h1, h2, h3, h4 {
     color: #F7F8FA !important;
     text-align: right;
-}
-
-/* Force horizontal text display and prevent vertical stacking */
-.horizontal-text {
-    writing-mode: horizontal-tb !important;
     white-space: nowrap !important;
-    display: inline-block !important;
 }
 
 .lm-card {
@@ -112,6 +113,7 @@ h1, h2, h3, h4 {
 .brand {
     font-size: 30px;
     font-weight: 800;
+    white-space: nowrap;
 }
 
 .brand span {
@@ -122,6 +124,7 @@ h1, h2, h3, h4 {
     color: #737B86;
     font-size: 12px;
     margin-top: -4px;
+    white-space: nowrap;
 }
 
 .label {
@@ -129,6 +132,7 @@ h1, h2, h3, h4 {
     font-size: 11px;
     text-transform: uppercase;
     font-weight: 600;
+    white-space: nowrap;
 }
 
 .big-value {
@@ -137,6 +141,7 @@ h1, h2, h3, h4 {
     font-weight: 800;
     line-height: 1;
     margin-top: 8px;
+    white-space: nowrap;
 }
 
 .metric-value {
@@ -144,11 +149,13 @@ h1, h2, h3, h4 {
     font-size: 21px;
     font-weight: 700;
     margin-top: 5px;
+    white-space: nowrap;
 }
 
 .metric-sub {
     color: #6F7781;
     font-size: 11px;
+    white-space: nowrap;
 }
 
 .green {
@@ -171,11 +178,13 @@ h1, h2, h3, h4 {
     font-size: 62px;
     font-weight: 800;
     line-height: 0.9;
+    white-space: nowrap;
 }
 
 .score-label {
     color: #858D98;
     font-size: 11px;
+    white-space: nowrap;
 }
 
 .progress-bg {
@@ -210,33 +219,14 @@ h1, h2, h3, h4 {
     color: #818995;
     font-size: 11px;
     font-weight: bold;
+    white-space: nowrap;
 }
 
 .scenario-value {
     font-size: 25px;
     font-weight: 800;
     margin-top: 5px;
-}
-
-.signal-box {
-    padding: 15px;
-    border-radius: 12px;
-    background: #0B0E11;
-    border: 1px solid #1B2026;
-    text-align: right;
-    direction: rtl;
-}
-
-.signal-title {
-    color: #777F89;
-    font-size: 11px;
-    font-weight: bold;
-}
-
-.signal-value {
-    font-size: 18px;
-    font-weight: 700;
-    margin-top: 5px;
+    white-space: nowrap;
 }
 
 .divider {
@@ -250,6 +240,7 @@ h1, h2, h3, h4 {
     color: #454C55;
     font-size: 11px;
     padding: 25px 0 10px 0;
+    white-space: nowrap;
 }
 
 .stButton > button {
@@ -363,56 +354,6 @@ def calculate_scenarios(analysis):
         "Sideways": sideways / total * 100,
         "Bearish": bearish / total * 100,
     }
-
-
-# ============================================================
-# SELLING PRESSURE
-# ============================================================
-
-def calculate_selling_pressure(df):
-    if df is None or df.empty:
-        return 50
-
-    row = df.iloc[-1]
-    pressure = 0
-    checks = 0
-
-    rsi = safe_float(row.get("RSI14"))
-    mfi = safe_float(row.get("MFI14"))
-    cmf = safe_float(row.get("CMF20"))
-    obv_bull = row.get("OBV_Bullish")
-    di_plus = safe_float(row.get("DI_PLUS"))
-    di_minus = safe_float(row.get("DI_MINUS"))
-    roc20 = safe_float(row.get("ROC20"))
-
-    if not pd.isna(rsi):
-        checks += 1
-        pressure += 100 if rsi >= 70 else (55 if rsi >= 60 else (15 if rsi <= 40 else 35))
-
-    if not pd.isna(mfi):
-        checks += 1
-        pressure += 100 if mfi >= 80 else (60 if mfi >= 65 else (15 if mfi <= 35 else 35))
-
-    if not pd.isna(cmf):
-        checks += 1
-        pressure += 90 if cmf < -0.10 else (60 if cmf < 0 else 20)
-
-    if obv_bull is not None:
-        checks += 1
-        pressure += 20 if bool(obv_bull) else 75
-
-    if not pd.isna(di_plus) and not pd.isna(di_minus):
-        checks += 1
-        pressure += 75 if di_minus > di_plus else 20
-
-    if not pd.isna(roc20):
-        checks += 1
-        pressure += 75 if roc20 < 0 else 20
-
-    if checks == 0:
-        return 50
-
-    return clamp(pressure / checks)
 
 
 # ============================================================
@@ -709,7 +650,7 @@ st.markdown(
     """
 <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:20px;direction:rtl;">
 <div>
-    <div class="brand"><span class="horizontal-text">legend-Mo</span> <span style="color:#FFFFFF;">LENS</span></div>
+    <div class="brand">legend-Mo <span>LENS</span></div>
     <div class="brand-sub">التحليل الذكي للأسهم المصرية</div>
 </div>
 <div style="text-align:left;">
@@ -727,7 +668,7 @@ st.markdown(
 # ============================================================
 
 with st.sidebar:
-    st.markdown('<div class="horizontal-text" style="font-size:20px;font-weight:800;margin-bottom:15px;direction:rtl;">🖤 legend-Mo</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:20px;font-weight:800;margin-bottom:15px;direction:rtl;white-space:nowrap;">🖤 legend-Mo</div>', unsafe_allow_html=True)
     st.markdown("### السوق")
 
     try:
@@ -798,23 +739,23 @@ st.markdown(
 <div style="display:flex;justify-content:space-between;align-items:center;direction:rtl;">
 <div>
 <div class="label">أسهم البورصة المصرية</div>
-<div style="font-size:34px;font-weight:800;margin-top:4px;">{symbol}</div>
-<div style="color:#707883;font-size:11px;margin-top:4px;">تحليل مخصص عبر LENS</div>
+<div style="font-size:34px;font-weight:800;margin-top:4px;white-space:nowrap;">{symbol}</div>
+<div style="color:#707883;font-size:11px;margin-top:4px;white-space:nowrap;">تحليل مخصص عبر LENS</div>
 </div>
 <div style="text-align:left;">
 <div class="label">السعر الحالي</div>
 <div class="big-value">{fmt(current_price)}</div>
-<div class="{('green' if change_pct >= 0 else 'red')}" style="font-size:13px;font-weight:700;margin-top:5px;">
+<div class="{('green' if change_pct >= 0 else 'red')}" style="font-size:13px;font-weight:700;margin-top:5px;white-space:nowrap;">
 {'▲' if change_pct >= 0 else '▼'} {pct(abs(change_pct))}
 </div>
 </div>
 </div>
 <div class="divider"></div>
 <div style="display:flex;justify-content:space-between;align-items:center;direction:rtl;">
-<div><span class="label">مصدر السعر</span><br><span style="font-size:12px;color:#B8BEC6;">{source} {' • مباشر' if realtime else ' • إغلاق سابق'}</span></div>
-<div><span class="label">إغلاق تاريخي</span><br><span style="font-size:12px;color:#B8BEC6;">{fmt(historical_close)}</span></div>
-<div><span class="label">الاتجاه العام</span><br><span class="yellow" style="font-size:13px;font-weight:700;">{trend}</span></div>
-<div><span class="label">التوصية الإشارية</span><br><span style="font-size:13px;font-weight:700;color:#EDEFF2;">{recommendation}</span></div>
+<div><span class="label">مصدر السعر</span><br><span style="font-size:12px;color:#B8BEC6;white-space:nowrap;">{source} {' • مباشر' if realtime else ' • إغلاق سابق'}</span></div>
+<div><span class="label">إغلاق تاريخي</span><br><span style="font-size:12px;color:#B8BEC6;white-space:nowrap;">{fmt(historical_close)}</span></div>
+<div><span class="label">الاتجاه العام</span><br><span class="yellow" style="font-size:13px;font-weight:700;white-space:nowrap;">{trend}</span></div>
+<div><span class="label">التوصية الإشارية</span><br><span style="font-size:13px;font-weight:700;color:#EDEFF2;white-space:nowrap;">{recommendation}</span></div>
 </div>
 </div>
 """,
@@ -834,7 +775,7 @@ with col1:
         <div class="lm-card" style="height:145px;">
         <div class="score-label">تقييم LENS الشامل</div>
         <div class="score-number {score_class}">{score:.0f}</div>
-        <div style="color:#737B85;font-size:11px;margin-top:7px;">/ 100 • {score_text(score)}</div>
+        <div style="color:#737B85;font-size:11px;margin-top:7px;white-space:nowrap;">/ 100 • {score_text(score)}</div>
         <div class="progress-bg"><div class="progress-fill" style="width:{score:.0f}%;"></div></div>
         </div>
         """,
@@ -886,8 +827,8 @@ with left:
             f"""
             <div style="margin-bottom:12px;">
             <div style="display:flex;justify-content:space-between;font-size:12px;">
-            <span style="color:#B8BEC6;">{name}</span>
-            <span style="color:#F1F3F5;font-weight:700;">{val:.1f} / {maximum}</span>
+            <span style="color:#B8BEC6;white-space:nowrap;">{name}</span>
+            <span style="color:#F1F3F5;font-weight:700;white-space:nowrap;">{val:.1f} / {maximum}</span>
             </div>
             <div class="progress-bg"><div class="progress-fill" style="width:{percentage:.1f}%;"></div></div>
             </div>
