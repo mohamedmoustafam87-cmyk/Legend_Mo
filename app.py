@@ -1,7 +1,7 @@
 # ============================================================
 # legend-Mo LENS
 # EGX Technical Intelligence Dashboard
-# Premium Black Edition (Absolute Horizontal Text Fix)
+# Premium Black Edition (Absolute Container Width Fix)
 # ============================================================
 
 import streamlit as st
@@ -36,7 +36,7 @@ st.set_page_config(
 
 
 # ============================================================
-# PREMIUM BLACK CSS (ABSOLUTE HORIZONTAL FIX)
+# PREMIUM BLACK CSS (ABSOLUTE CONTAINER FIX)
 # ============================================================
 
 st.markdown(
@@ -51,11 +51,9 @@ html, body, [class*="css"] {
     text-align: right;
 }
 
-/* Force all text elements to stay horizontal and prevent vertical stacking */
-div, span, p, h1, h2, h3, h4, label, a {
+/* Force everything to horizontal and disable vertical breaking */
+*, *:before, *:after {
     writing-mode: horizontal-tb !important;
-    word-break: normal !important;
-    overflow-wrap: normal !important;
 }
 
 .stApp {
@@ -85,12 +83,14 @@ section[data-testid="stSidebar"] * {
     color: #E8EBEF;
     direction: rtl;
     text-align: right;
+    writing-mode: horizontal-tb !important;
 }
 
 h1, h2, h3, h4 {
     color: #F7F8FA !important;
     text-align: right;
     white-space: nowrap !important;
+    writing-mode: horizontal-tb !important;
 }
 
 .lm-card {
@@ -108,6 +108,7 @@ h1, h2, h3, h4 {
         inset 0 1px 0 rgba(255,255,255,0.015);
     text-align: right;
     direction: rtl;
+    min-width: 0;
 }
 
 .brand {
