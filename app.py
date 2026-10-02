@@ -1,7 +1,7 @@
 # ============================================================
 # legend-Mo LENS
 # EGX Technical Intelligence Dashboard
-# Premium Black Edition (Arabic Fixed)
+# Premium Black Edition (Final Layout Fix)
 # ============================================================
 
 import streamlit as st
@@ -36,7 +36,7 @@ st.set_page_config(
 
 
 # ============================================================
-# PREMIUM BLACK CSS (RTL & HORIZONTAL TEXT FIX)
+# PREMIUM BLACK CSS (FORCED HORIZONTAL TEXT FIX)
 # ============================================================
 
 st.markdown(
@@ -85,6 +85,13 @@ h1, h2, h3, h4 {
     text-align: right;
 }
 
+/* Force horizontal text display and prevent vertical stacking */
+.horizontal-text {
+    writing-mode: horizontal-tb !important;
+    white-space: nowrap !important;
+    display: inline-block !important;
+}
+
 .lm-card {
     background: linear-gradient(
         145deg,
@@ -105,7 +112,6 @@ h1, h2, h3, h4 {
 .brand {
     font-size: 30px;
     font-weight: 800;
-    letter-spacing: normal;
 }
 
 .brand span {
@@ -115,7 +121,6 @@ h1, h2, h3, h4 {
 .brand-sub {
     color: #737B86;
     font-size: 12px;
-    letter-spacing: normal;
     margin-top: -4px;
 }
 
@@ -704,7 +709,7 @@ st.markdown(
     """
 <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:20px;direction:rtl;">
 <div>
-    <div class="brand">legend-Mo <span>LENS</span></div>
+    <div class="brand"><span class="horizontal-text">legend-Mo</span> <span style="color:#FFFFFF;">LENS</span></div>
     <div class="brand-sub">التحليل الذكي للأسهم المصرية</div>
 </div>
 <div style="text-align:left;">
@@ -722,7 +727,7 @@ st.markdown(
 # ============================================================
 
 with st.sidebar:
-    st.markdown('<div style="font-size:20px;font-weight:800;margin-bottom:15px;direction:rtl;">🖤 legend-Mo</div>', unsafe_allow_html=True)
+    st.markdown('<div class="horizontal-text" style="font-size:20px;font-weight:800;margin-bottom:15px;direction:rtl;">🖤 legend-Mo</div>', unsafe_allow_html=True)
     st.markdown("### السوق")
 
     try:
