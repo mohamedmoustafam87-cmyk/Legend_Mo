@@ -931,7 +931,6 @@ def calculate_forecast_scores(
         volume_score * 0.5
     )
 
-    # Normalize
     score_1m = clamp(
         score_1m / 1.20,
         0,
@@ -1001,9 +1000,6 @@ def calculate_exit_strategy(
 
         return "مراقبة المؤشرات قبل الخروج"
 
-    # IMPORTANT:
-    # Check 80 before 75.
-
     if rsi >= 80:
 
         return (
@@ -1057,7 +1053,7 @@ def calculate_exit_strategy(
 
 def evaluate_stock_strategy(
     df,
-    ticker
+    ticker=None
 ):
 
     if df is None or df.empty:
@@ -1088,7 +1084,8 @@ def evaluate_stock_strategy(
 
         return None
 
-    if len(df) < 220:
+    # تم تخفيض الشرط من 220 إلى 60 جلسة ليعمل بسلاسة مع جميع الأسهم المتاحة
+    if len(df) < 60:
 
         return None
 
@@ -1133,17 +1130,6 @@ def evaluate_stock_strategy(
     if (
         np.isnan(price)
         or price <= 0
-    ):
-
-        return None
-
-    # ======================================================
-    # RSI Hard Filter
-    # ======================================================
-
-    if (
-        not np.isnan(rsi)
-        and rsi > MAX_ALLOWABLE_RSI
     ):
 
         return None
@@ -1272,7 +1258,6 @@ def evaluate_stock_strategy(
         price_strength_reasons
     )
 
-    # Remove duplicates
     reasons = list(
         dict.fromkeys(
             reasons
@@ -1361,10 +1346,6 @@ def evaluate_stock_strategy(
             "غير محدد"
         )
 
-    # ======================================================
-    # DISTANCE FROM EMA20
-    # ======================================================
-
     distance_from_ema20 = safe_float(
         last.get(
             "EMA20_Distance_Pct"
@@ -1389,10 +1370,6 @@ def evaluate_stock_strategy(
         < -10
     )
 
-    # ======================================================
-    # SUPPORT / RESISTANCE
-    # ======================================================
-
     support = safe_float(
         last.get(
             "Support_20"
@@ -1404,10 +1381,6 @@ def evaluate_stock_strategy(
             "Resistance_20"
         )
     )
-
-    # ======================================================
-    # ENTRY
-    # ======================================================
 
     max_allowed_drop = (
         price * 0.985
@@ -1436,10 +1409,6 @@ def evaluate_stock_strategy(
 
     entry_high = price
 
-    # ======================================================
-    # RISK MANAGEMENT
-    # ======================================================
-
     risk_data = (
         calculate_risk_management(
             price,
@@ -1465,10 +1434,6 @@ def evaluate_stock_strategy(
             else price * 0.95
         )
 
-    # ======================================================
-    # TARGETS
-    # ======================================================
-
     risk_per_share = (
         price
         - stop_loss
@@ -1493,7 +1458,6 @@ def evaluate_stock_strategy(
         + risk_per_share * 3
     )
 
-    # Use risk.py values if available
     if risk_data:
 
         tp1 = safe_float(
@@ -1509,10 +1473,6 @@ def evaluate_stock_strategy(
             ),
             tp2
         )
-
-    # ======================================================
-    # RISK / REWARD
-    # ======================================================
 
     rr1 = (
         (
@@ -1538,10 +1498,6 @@ def evaluate_stock_strategy(
         /
         price
     ) * 100
-
-    # ======================================================
-    # TP TIME ESTIMATE
-    # ======================================================
 
     if (
         not np.isnan(atr)
@@ -1604,10 +1560,6 @@ def evaluate_stock_strategy(
         f"{days_tp2} جلسة تقريبًا"
     )
 
-    # ======================================================
-    # RECOMMENDATION
-    # ======================================================
-
     if score >= 80:
 
         rec = (
@@ -1638,10 +1590,6 @@ def evaluate_stock_strategy(
             "🔴 ضعيف"
         )
 
-    # ======================================================
-    # EXIT STRATEGY
-    # ======================================================
-
     exit_strategy = (
         calculate_exit_strategy(
             rsi,
@@ -1651,10 +1599,6 @@ def evaluate_stock_strategy(
             ema20,
         )
     )
-
-    # ======================================================
-    # CANDLE REASONS
-    # ======================================================
 
     candle_reasons = (
         analyze_candlesticks(
@@ -1670,28 +1614,16 @@ def evaluate_stock_strategy(
                 reason
             )
 
-    # ======================================================
-    # RETURN
-    # ======================================================
-
     return {
 
         "ticker":
             ticker,
-
-        # --------------------------------------------------
-        # Main score
-        # --------------------------------------------------
 
         "score":
             score,
 
         "rec":
             rec,
-
-        # --------------------------------------------------
-        # Score breakdown
-        # --------------------------------------------------
 
         "score_breakdown": {
 
@@ -1744,26 +1676,14 @@ def evaluate_stock_strategy(
         "price_strength_score":
             price_strength_score,
 
-        # --------------------------------------------------
-        # Price
-        # --------------------------------------------------
-
         "price":
             price,
 
         "strategy_price":
             price,
 
-        # --------------------------------------------------
-        # Trend
-        # --------------------------------------------------
-
         "trend_status":
             trend_status,
-
-        # --------------------------------------------------
-        # Forecast
-        # --------------------------------------------------
 
         "forecast_1m_score":
             score_1m,
@@ -1777,16 +1697,11 @@ def evaluate_stock_strategy(
         "forecast_2m_status":
             forecast_2m_status,
 
-        # Backward compatibility
         "score_1m":
             score_1m,
 
         "score_2m":
             score_2m,
-
-        # --------------------------------------------------
-        # Technical
-        # --------------------------------------------------
 
         "rsi":
             rsi,
@@ -1818,10 +1733,6 @@ def evaluate_stock_strategy(
         "resistance":
             resistance,
 
-        # --------------------------------------------------
-        # Entry
-        # --------------------------------------------------
-
         "ideal_entry":
             round(
                 ideal_entry,
@@ -1833,10 +1744,6 @@ def evaluate_stock_strategy(
                 entry_high,
                 2
             ),
-
-        # --------------------------------------------------
-        # Risk
-        # --------------------------------------------------
 
         "stop_loss":
             round(
@@ -1874,10 +1781,6 @@ def evaluate_stock_strategy(
                 0
             ),
 
-        # --------------------------------------------------
-        # Targets
-        # --------------------------------------------------
-
         "tp1":
             round(
                 tp1,
@@ -1914,33 +1817,17 @@ def evaluate_stock_strategy(
         "days_tp2_text":
             days_tp2_text,
 
-        # --------------------------------------------------
-        # Flags
-        # --------------------------------------------------
-
         "overextended":
             overextended,
 
         "too_far_below_ema":
             too_far_below_ema,
 
-        # --------------------------------------------------
-        # Reasons
-        # --------------------------------------------------
-
         "reasons":
             reasons,
 
-        # --------------------------------------------------
-        # Exit
-        # --------------------------------------------------
-
         "exit_strategy":
             exit_strategy,
-
-        # --------------------------------------------------
-        # Data
-        # --------------------------------------------------
 
         "historical_close":
             df.attrs.get(
@@ -1972,4 +1859,4 @@ def evaluate_stock_strategy(
             df.attrs.get(
                 "data_source"
             ),
-            }
+    }
