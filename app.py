@@ -1,739 +1,2403 @@
-import numpy as np
-import pandas as pd
+# ============================================================
+# legend-Mo LENS
+# EGX Technical Intelligence Dashboard
+# Premium Black Edition
+# ============================================================
+
 import streamlit as st
+import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from datetime import datetime
 
-import config
-from config import EGX_STOCKS
-
+# ------------------------------------------------------------
+# PROJECT IMPORTS
+# ------------------------------------------------------------
 from scanner import (
-    get_stock_data,
     fetch_mubasher_prices,
+    get_stock_data,
 )
 
 from indicators import calculate_indicators
 from strategy import evaluate_stock_strategy
 
 
-# =====================================================================
+# ============================================================
 # PAGE CONFIG
-# =====================================================================
+# ============================================================
 
 st.set_page_config(
-    page_title="EGX Smart Dashboard",
-    page_icon="📈",
+    page_title="legend-Mo LENS",
+    page_icon="🖤",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 
-# =====================================================================
-# CSS (Dark Theme Pro Styling)
-# =====================================================================
+# ============================================================
+# PREMIUM BLACK CSS
+# ============================================================
 
 st.markdown(
     """
-    <style>
-    .stApp {
-        background-color: #0e1117;
-        color: #ffffff;
-        direction: rtl;
-        text-align: right;
-    }
+<style>
 
-    .stMarkdown,
-    .stAlert,
-    h1, h2, h3, h4, h5, h6 {
-        direction: rtl;
-        text-align: right;
-        color: #ffffff;
-    }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
-    [data-testid="stMetric"] {
-        direction: rtl;
-        text-align: right;
-        background-color: #161b22;
-        border: 1px solid #30363d;
-        padding: 15px;
-        border-radius: 10px;
-    }
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
+}
 
-    .section-title {
-        direction: rtl;
-        text-align: right;
-        font-size: 22px;
-        font-weight: bold;
-        margin-top: 25px;
-        margin-bottom: 15px;
-        color: #58a6ff;
-        border-bottom: 1px solid #30363d;
-        padding-bottom: 5px;
-    }
+.stApp {
+    background:
+        radial-gradient(circle at 15% 10%, rgba(255,255,255,0.035), transparent 25%),
+        radial-gradient(circle at 85% 20%, rgba(0,255,170,0.025), transparent 25%),
+        #050607;
+    color: #F5F7FA;
+}
 
-    div[data-testid="stToggle"] {
-        direction: rtl;
-    }
-    </style>
-    """,
+/* Main container */
+.block-container {
+    padding-top: 1.2rem;
+    padding-bottom: 2rem;
+    max-width: 1600px;
+}
+
+/* Sidebar */
+section[data-testid="stSidebar"] {
+    background: #080A0C;
+    border-right: 1px solid #181C21;
+}
+
+section[data-testid="stSidebar"] * {
+    color: #E8EBEF;
+}
+
+/* Headers */
+h1, h2, h3, h4 {
+    color: #F7F8FA !important;
+}
+
+/* Cards */
+.lm-card {
+    background: linear-gradient(
+        145deg,
+        #0C0F12 0%,
+        #090B0E 100%
+    );
+    border: 1px solid #1B2026;
+    border-radius: 16px;
+    padding: 18px;
+    margin-bottom: 12px;
+    box-shadow:
+        0 8px 30px rgba(0,0,0,0.28),
+        inset 0 1px 0 rgba(255,255,255,0.015);
+}
+
+.lm-card:hover {
+    border-color: #292F36;
+}
+
+/* Brand */
+.brand {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -1px;
+}
+
+.brand span {
+    color: #FFFFFF;
+}
+
+.brand-sub {
+    color: #737B86;
+    font-size: 12px;
+    letter-spacing: 2px;
+    margin-top: -4px;
+}
+
+/* Small label */
+.label {
+    color: #727A84;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.3px;
+    font-weight: 600;
+}
+
+/* Big value */
+.big-value {
+    color: #FFFFFF;
+    font-size: 34px;
+    font-weight: 800;
+    line-height: 1;
+    margin-top: 8px;
+}
+
+/* Metric */
+.metric-value {
+    color: #F5F7FA;
+    font-size: 21px;
+    font-weight: 700;
+    margin-top: 5px;
+}
+
+.metric-sub {
+    color: #6F7781;
+    font-size: 11px;
+}
+
+/* Status */
+.green {
+    color: #00E676 !important;
+}
+
+.red {
+    color: #FF4D5A !important;
+}
+
+.yellow {
+    color: #FFC857 !important;
+}
+
+.blue {
+    color: #55A7FF !important;
+}
+
+.gray {
+    color: #8A929D !important;
+}
+
+/* Score */
+.score-number {
+    font-size: 62px;
+    font-weight: 800;
+    line-height: 0.9;
+}
+
+.score-label {
+    color: #858D98;
+    font-size: 11px;
+    letter-spacing: 2px;
+}
+
+/* Progress */
+.progress-bg {
+    width: 100%;
+    height: 7px;
+    background: #171B20;
+    border-radius: 20px;
+    overflow: hidden;
+    margin-top: 8px;
+}
+
+.progress-fill {
+    height: 100%;
+    border-radius: 20px;
+    background: linear-gradient(
+        90deg,
+        #FFFFFF,
+        #777F89
+    );
+}
+
+/* Scenario */
+.scenario {
+    background: #0A0D10;
+    border: 1px solid #1A1F25;
+    border-radius: 12px;
+    padding: 13px;
+}
+
+.scenario-title {
+    color: #818995;
+    font-size: 10px;
+    letter-spacing: 1px;
+}
+
+.scenario-value {
+    font-size: 25px;
+    font-weight: 800;
+    margin-top: 5px;
+}
+
+/* Signal */
+.signal-box {
+    padding: 15px;
+    border-radius: 12px;
+    background: #0B0E11;
+    border: 1px solid #1B2026;
+}
+
+.signal-title {
+    color: #777F89;
+    font-size: 10px;
+    letter-spacing: 1px;
+}
+
+.signal-value {
+    font-size: 18px;
+    font-weight: 700;
+    margin-top: 5px;
+}
+
+/* Divider */
+.divider {
+    height: 1px;
+    background: #181C21;
+    margin: 15px 0;
+}
+
+/* Footer */
+.footer {
+    text-align: center;
+    color: #454C55;
+    font-size: 10px;
+    padding: 25px 0 10px 0;
+    letter-spacing: 1px;
+}
+
+/* Streamlit buttons */
+.stButton > button {
+    background: #0D1013;
+    color: #DDE1E6;
+    border: 1px solid #242A31;
+    border-radius: 10px;
+}
+
+.stButton > button:hover {
+    border-color: #666F7A;
+    color: white;
+}
+
+/* Selectbox */
+div[data-baseweb="select"] > div {
+    background: #0C0F12;
+    border-color: #242A31;
+}
+
+/* Toggle */
+.stToggle label {
+    color: #B7BDC5 !important;
+}
+
+</style>
+""",
     unsafe_allow_html=True,
 )
 
 
-# =====================================================================
-# CONSTANTS
-# =====================================================================
-
-MIN_HISTORY_ROWS = 60
-SR_WINDOW = 80
-SWING_LEFT = 3
-SWING_RIGHT = 3
-ZONE_TOLERANCE = 0.012
-ATR_ZONE_MULTIPLIER = 0.50
-
-
-# =====================================================================
+# ============================================================
 # HELPERS
-# =====================================================================
+# ============================================================
 
 def safe_float(value, default=np.nan):
     try:
-        if value is None or pd.isna(value):
-            return default
         return float(value)
-    except (TypeError, ValueError):
+    except Exception:
         return default
 
 
-def fmt(value, decimals=2, suffix=""):
+def fmt(value, digits=2):
     value = safe_float(value)
-    if np.isnan(value):
+    if pd.isna(value):
         return "—"
-    return f"{value:,.{decimals}f}{suffix}"
+    return f"{value:,.{digits}f}"
 
 
-def normalize_stock_list(stocks):
-    if stocks is None:
-        return []
-    if isinstance(stocks, dict):
-        return list(stocks.keys())
-    if isinstance(stocks, (list, tuple, set)):
-        return list(stocks)
-    if isinstance(stocks, pd.DataFrame):
-        for col in ["ticker", "symbol", "code", "Ticker", "Symbol"]:
-            if col in stocks.columns:
-                return stocks[col].dropna().astype(str).tolist()
-    return []
+def pct(value, digits=2):
+    value = safe_float(value)
+    if pd.isna(value):
+        return "—"
+    return f"{value:.{digits}f}%"
 
 
-def find_column(df, candidates):
-    normalized = {str(c).strip().lower(): c for c in df.columns}
-    for candidate in candidates:
-        key = candidate.strip().lower()
-        if key in normalized:
-            return normalized[key]
-    return None
+def clamp(value, low=0, high=100):
+    try:
+        return max(low, min(high, float(value)))
+    except Exception:
+        return low
 
 
-# =====================================================================
-# STANDARDIZE OHLCV
-# =====================================================================
+def score_color(score):
+    score = safe_float(score, 0)
+
+    if score >= 70:
+        return "green"
+    elif score >= 50:
+        return "yellow"
+    return "red"
+
+
+def score_text(score):
+    score = safe_float(score, 0)
+
+    if score >= 80:
+        return "Very Strong"
+    if score >= 70:
+        return "Strong"
+    if score >= 60:
+        return "Positive"
+    if score >= 50:
+        return "Neutral"
+    return "Weak"
+
+
+def normalize_score(value, maximum):
+    value = safe_float(value, 0)
+    if maximum <= 0:
+        return 0
+    return clamp(value / maximum * 100)
+
+
+# ============================================================
+# DATA PREPARATION
+# ============================================================
 
 def standardize_ohlcv(df):
-    if df is None or len(df) == 0:
-        return pd.DataFrame()
 
-    attrs = dict(getattr(df, "attrs", {}))
-    df = df.copy()
+    if df is None or df.empty:
+        return None
 
-    aliases = {
-        "Date": ["date", "datetime", "time", "التاريخ"],
-        "Open": ["open", "opening", "الفتح"],
-        "High": ["high", "الاعلى", "أعلى"],
-        "Low": ["low", "الادنى", "أدنى"],
-        "Close": ["close", "price", "last", "السعر", "الإغلاق"],
-        "Volume": ["volume", "vol", "الحجم", "حجم التداول"],
+    data = df.copy()
+
+    # Flatten MultiIndex
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = [
+            c[0] if isinstance(c, tuple) else c
+            for c in data.columns
+        ]
+
+    rename = {}
+
+    for c in data.columns:
+        lc = str(c).lower()
+
+        if lc == "open":
+            rename[c] = "Open"
+        elif lc == "high":
+            rename[c] = "High"
+        elif lc == "low":
+            rename[c] = "Low"
+        elif lc == "close":
+            rename[c] = "Close"
+        elif lc in ["volume", "vol"]:
+            rename[c] = "Volume"
+
+    data = data.rename(columns=rename)
+
+    required = ["Open", "High", "Low", "Close", "Volume"]
+
+    for col in required:
+        if col not in data.columns:
+            return None
+
+    data = data[required].copy()
+
+    for col in required:
+        data[col] = pd.to_numeric(
+            data[col],
+            errors="coerce"
+        )
+
+    data = data.dropna()
+
+    if not isinstance(data.index, pd.DatetimeIndex):
+        data.index = pd.to_datetime(data.index)
+
+    data = data.sort_index()
+
+    return data
+
+
+# ============================================================
+# SCENARIO ENGINE
+# ============================================================
+
+def calculate_scenarios(analysis):
+
+    score = clamp(analysis.get("score", 50))
+
+    trend = normalize_score(
+        analysis.get("trend_score", 0), 20
+    )
+
+    momentum = normalize_score(
+        analysis.get("momentum_score", 0), 15
+    )
+
+    volume = normalize_score(
+        analysis.get("volume_score", 0), 15
+    )
+
+    money = normalize_score(
+        analysis.get("money_flow_score", 0), 10
+    )
+
+    # Transparent heuristic model.
+    # These are model scenario estimates, NOT calibrated probabilities.
+
+    bullish = (
+        score * 0.45 +
+        trend * 0.20 +
+        momentum * 0.25 +
+        volume * 0.05 +
+        money * 0.05
+    )
+
+    bearish = (
+        (100 - score) * 0.45 +
+        (100 - trend) * 0.20 +
+        (100 - momentum) * 0.25 +
+        (100 - volume) * 0.05 +
+        (100 - money) * 0.05
+    )
+
+    sideways = (
+        100 -
+        abs(bullish - bearish)
+    )
+
+    bullish = max(1, bullish)
+    bearish = max(1, bearish)
+    sideways = max(1, sideways)
+
+    total = bullish + bearish + sideways
+
+    return {
+        "Bullish": bullish / total * 100,
+        "Sideways": sideways / total * 100,
+        "Bearish": bearish / total * 100,
     }
 
-    rename_map = {}
-    for std, candidates in aliases.items():
-        col = find_column(df, [std] + candidates)
-        if col is not None and col != std:
-            rename_map[col] = std
 
-    df = df.rename(columns=rename_map)
+# ============================================================
+# SELLING PRESSURE
+# ============================================================
 
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-        df = df.dropna(subset=["Date"]).set_index("Date")
-    elif not isinstance(df.index, pd.DatetimeIndex):
-        try:
-            df.index = pd.to_datetime(df.index)
-        except Exception:
-            pass
+def calculate_selling_pressure(df):
 
-    for col in ["Open", "High", "Low", "Close", "Volume"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    if "Close" not in df.columns:
-        return pd.DataFrame()
-
-    df = df.dropna(subset=["Close"]).sort_index()
-    df = df[~df.index.duplicated(keep="last")]
-    df.index.name = "Date"
-    df.attrs.update(attrs)
-    return df
-
-
-# =====================================================================
-# MARKET DATA VALIDATION
-# =====================================================================
-
-def validate_market_data(df):
-    result = {"score": 100, "warnings": []}
     if df is None or df.empty:
-        return {"score": 0, "warnings": ["لا توجد بيانات."]}
-    if len(df) < MIN_HISTORY_ROWS:
-        result["score"] -= 30
-        result["warnings"].append(f"عدد الجلسات قليل: {len(df)} جلسة.")
-    elif len(df) < 200:
-        result["warnings"].append(f"المتاح {len(df)} جلسة فقط، فـ MA 200 غير مكتمل.")
-    return result
+        return 50
 
+    row = df.iloc[-1]
 
-# =====================================================================
-# MARKET STRUCTURE
-# =====================================================================
+    pressure = 0
+    checks = 0
 
-def detect_market_structure(df):
-    if len(df) < 30:
-        return {"trend": "غير كافٍ", "structure": "غير كافٍ"}
+    rsi = safe_float(row.get("RSI14"))
+    mfi = safe_float(row.get("MFI14"))
+    cmf = safe_float(row.get("CMF20"))
+    obv_bull = row.get("OBV_Bullish")
+    di_plus = safe_float(row.get("DI_PLUS"))
+    di_minus = safe_float(row.get("DI_MINUS"))
+    roc20 = safe_float(row.get("ROC20"))
 
-    close = df["Close"]
-    ema20 = close.ewm(span=20, adjust=False).mean()
-    ema50 = close.ewm(span=50, adjust=False).mean()
-    last = close.iloc[-1]
-    slope20 = ema20.iloc[-1] - ema20.iloc[-6]
-    slope50 = ema50.iloc[-1] - ema50.iloc[-6]
-
-    if last > ema20.iloc[-1] > ema50.iloc[-1] and slope20 > 0 and slope50 > 0:
-        trend = "صاعد"
-    elif last < ema20.iloc[-1] < ema50.iloc[-1] and slope20 < 0 and slope50 < 0:
-        trend = "هابط"
-    else:
-        trend = "عرضي / انتقالي"
-
-    return {"trend": trend, "structure": "تحليل هيكلي نشط"}
-
-
-# =====================================================================
-# SWING HIGH / LOW
-# =====================================================================
-
-def find_swing_points(df, left=SWING_LEFT, right=SWING_RIGHT, window=SR_WINDOW):
-    data = df.tail(window).copy()
-    if len(data) < (left + right + 5):
-        return [], []
-
-    highs, lows = [], []
-    high_values = data["High"].values
-    low_values = data["Low"].values
-
-    for i in range(left, len(data) - right):
-        current_high = high_values[i]
-        if current_high >= high_values[i - left:i].max() and current_high >= high_values[i + 1:i + 1 + right].max():
-            highs.append((float(current_high), data.index[i]))
-
-        current_low = low_values[i]
-        if current_low <= low_values[i - left:i].min() and current_low <= low_values[i + 1:i + 1 + right].min():
-            lows.append((float(current_low), data.index[i]))
-
-    return lows, highs
-
-
-def merge_price_levels(levels, tolerance=ZONE_TOLERANCE):
-    if not levels:
-        return []
-    clean = sorted([float(x) for x in levels if np.isfinite(x) and x > 0])
-    if not clean:
-        return []
-
-    zones = []
-    current = [clean[0]]
-
-    for price in clean[1:]:
-        center = np.mean(current)
-        if abs(price - center) / center <= tolerance:
-            current.append(price)
+    if not pd.isna(rsi):
+        checks += 1
+        if rsi >= 70:
+            pressure += 100
+        elif rsi >= 60:
+            pressure += 55
+        elif rsi <= 40:
+            pressure += 15
         else:
-            zones.append((min(current), max(current), np.mean(current)))
-            current = [price]
+            pressure += 35
 
-    zones.append((min(current), max(current), np.mean(current)))
-    return zones
+    if not pd.isna(mfi):
+        checks += 1
+        if mfi >= 80:
+            pressure += 100
+        elif mfi >= 65:
+            pressure += 60
+        elif mfi <= 35:
+            pressure += 15
+        else:
+            pressure += 35
 
+    if not pd.isna(cmf):
+        checks += 1
+        if cmf < -0.10:
+            pressure += 90
+        elif cmf < 0:
+            pressure += 60
+        else:
+            pressure += 20
 
-def find_support_resistance(df, current_price=None):
-    data = df.tail(SR_WINDOW).copy()
-    if data.empty:
-        return [], []
+    if obv_bull is not None:
+        checks += 1
+        pressure += 20 if bool(obv_bull) else 75
 
-    if current_price is None:
-        current_price = safe_float(data["Close"].iloc[-1])
-    current_price = safe_float(current_price)
-    if np.isnan(current_price):
-        return [], []
+    if not pd.isna(di_plus) and not pd.isna(di_minus):
+        checks += 1
+        pressure += 75 if di_minus > di_plus else 20
 
-    swing_lows, swing_highs = find_swing_points(data)
-    support_candidates, resistance_candidates = [], []
+    if not pd.isna(roc20):
+        checks += 1
+        pressure += 75 if roc20 < 0 else 20
 
-    for level, _ in swing_lows:
-        if level < current_price:
-            support_candidates.append(level)
-    for level, _ in swing_highs:
-        if level > current_price:
-            resistance_candidates.append(level)
-
-    for period in [20, 50]:
-        if len(data) >= period:
-            low_level = data["Low"].tail(period).min()
-            high_level = data["High"].tail(period).max()
-            if low_level < current_price:
-                support_candidates.append(float(low_level))
-            if high_level > current_price:
-                resistance_candidates.append(float(high_level))
-
-    support_zones = merge_price_levels(support_candidates)
-    resistance_zones = merge_price_levels(resistance_candidates)
-
-    support_zones = sorted(support_zones, key=lambda x: abs(current_price - x[2]))[:3]
-    resistance_zones = sorted(resistance_zones, key=lambda x: abs(current_price - x[2]))[:3]
-
-    return support_zones, resistance_zones
-
-
-def previous_day_levels(df):
-    if len(df) < 2:
-        return {}
-    row = df.iloc[-2]
-    return {
-        "Previous High": safe_float(row.get("High")),
-        "Previous Low": safe_float(row.get("Low")),
-        "Previous Close": safe_float(row.get("Close")),
-    }
-
-
-def rolling_levels(df):
-    result = {}
-    for period in [20, 50]:
-        if len(df) < period:
-            continue
-        result[f"{period}D High"] = float(df["High"].tail(period).max())
-        result[f"{period}D Low"] = float(df["Low"].tail(period).min())
-    return result
-
-
-def calc_pivot_points(df):
-    if len(df) < 2:
-        return {}
-    row = df.iloc[-2]
-    high, low, close = safe_float(row.get("High")), safe_float(row.get("Low")), safe_float(row.get("Close"))
-    if any(np.isnan(x) for x in [high, low, close]):
-        return {}
-
-    pivot = (high + low + close) / 3
-    return {
-        "Pivot": pivot,
-        "R1": (2 * pivot) - low,
-        "R2": pivot + (high - low),
-        "R3": high + 2 * (pivot - low),
-        "S1": (2 * pivot) - high,
-        "S2": pivot - (high - low),
-        "S3": low - 2 * (high - pivot),
-    }
-
-
-def calc_fibonacci(df):
-    data = df.tail(SR_WINDOW).copy()
-    swing_lows, swing_highs = find_swing_points(data)
-    if not swing_lows or not swing_highs:
-        return {}
-
-    last_low = max(swing_lows, key=lambda x: x[1])
-    last_high = max(swing_highs, key=lambda x: x[1])
-    low_price, high_price = last_low[0], last_high[0]
-    low_date, high_date = last_low[1], last_high[1]
-
-    if not np.isfinite(low_price) or not np.isfinite(high_price) or high_price <= low_price:
-        return {}
-
-    diff = high_price - low_price
-    if low_date < high_date:
-        return {
-            "0.0%": high_price,
-            "23.6%": high_price - diff * 0.236,
-            "38.2%": high_price - diff * 0.382,
-            "50.0%": high_price - diff * 0.500,
-            "61.8%": high_price - diff * 0.618,
-            "78.6%": high_price - diff * 0.786,
-            "100.0%": low_price,
-        }
-    return {
-        "0.0%": low_price,
-        "23.6%": low_price + diff * 0.236,
-        "38.2%": low_price + diff * 0.382,
-        "50.0%": low_price + diff * 0.500,
-        "61.8%": low_price + diff * 0.618,
-        "78.6%": low_price + diff * 0.786,
-        "100.0%": high_price,
-    }
-
-
-def calc_atr_zones(df, current_price):
-    if "ATR_14" not in df.columns:
-        return {}
-    atr = safe_float(df["ATR_14"].iloc[-1])
-    current_price = safe_float(current_price)
-    if np.isnan(atr) or np.isnan(current_price) or atr <= 0:
-        return {}
-
-    buffer_value = atr * ATR_ZONE_MULTIPLIER
-    return {
-        "ATR Support Zone": (current_price - atr, current_price - buffer_value),
-        "ATR Resistance Zone": (current_price + buffer_value, current_price + atr),
-    }
-
-
-def calculate_risk_score(df, current_price):
-    if df is None or df.empty:
-        return 50
-    current_price = safe_float(current_price)
-    if np.isnan(current_price):
+    if checks == 0:
         return 50
 
-    risk = 20
-    if "ATR_14" in df.columns:
-        atr = safe_float(df["ATR_14"].iloc[-1])
-        if not np.isnan(atr) and current_price > 0:
-            atr_pct = (atr / current_price) * 100
-            if atr_pct >= 6: risk += 25
-            elif atr_pct >= 4: risk += 15
-            elif atr_pct >= 2.5: risk += 8
-
-    if "RSI_14" in df.columns:
-        rsi = safe_float(df["RSI_14"].iloc[-1])
-        if not np.isnan(rsi):
-            if rsi >= 75 or rsi <= 25: risk += 15
-            elif rsi >= 70 or rsi <= 30: risk += 8
-
-    return int(max(0, min(100, risk)))
+    return clamp(pressure / checks)
 
 
-def risk_label(score):
-    if score >= 75: return "مخاطرة مرتفعة"
-    if score >= 55: return "مخاطرة متوسطة إلى مرتفعة"
-    if score >= 35: return "مخاطرة معتدلة"
-    return "مخاطرة منخفضة"
+# ============================================================
+# TREND DESCRIPTION
+# ============================================================
 
+def trend_description(df):
 
-# =====================================================================
-# DATA LOADING
-# =====================================================================
-
-@st.cache_data(ttl=300, show_spinner=False)
-def load_mubasher():
-    try:
-        prices = fetch_mubasher_prices()
-        return prices if prices else {}
-    except Exception:
-        return {}
-
-
-@st.cache_data(ttl=300, show_spinner=False)
-def load_analysis(ticker, prices):
-    try:
-        result = get_stock_data(ticker, prices)
-    except Exception:
-        return None, None
-
-    if result is None:
-        return None, None
-
-    if isinstance(result, tuple):
-        df, data_source = result
-    else:
-        df = result
-        data_source = "Unknown"
-
-    if df is None or not isinstance(df, pd.DataFrame) or df.empty:
-        return None, None
-
-    metadata = {
-        "current_price": df.attrs.get("current_price"),
-        "historical_close": df.attrs.get("historical_close"),
-        "price_source": df.attrs.get("price_source"),
-        "is_realtime": df.attrs.get("is_realtime", False),
-        "current_vs_close_pct": df.attrs.get("current_vs_close_pct"),
-        "data_source": df.attrs.get("data_source", data_source),
-    }
-
-    df = standardize_ohlcv(df)
-    if df.empty:
-        return None, None
-
-    df = calculate_indicators(df)
     if df is None or df.empty:
-        return None, None
+        return "Unknown"
 
-    df = standardize_ohlcv(df)
-    if df.empty:
-        return None, None
+    row = df.iloc[-1]
+    price = safe_float(row.get("Close"))
 
-    for key, value in metadata.items():
-        df.attrs[key] = value
+    ema20 = safe_float(row.get("EMA20"))
+    ema50 = safe_float(row.get("EMA50"))
+    ma200 = safe_float(row.get("MA200"))
 
-    analysis = evaluate_stock_strategy(df, ticker)
-    if analysis is not None:
-        for key, value in metadata.items():
-            analysis[key] = value
+    bullish = 0
+    bearish = 0
 
-    return df, analysis
+    if not pd.isna(price) and not pd.isna(ema20):
+        bullish += price > ema20
+        bearish += price < ema20
+
+    if not pd.isna(ema20) and not pd.isna(ema50):
+        bullish += ema20 > ema50
+        bearish += ema20 < ema50
+
+    if not pd.isna(price) and not pd.isna(ma200):
+        bullish += price > ma200
+        bearish += price < ma200
+
+    if bullish >= 3:
+        return "Bullish"
+
+    if bearish >= 2:
+        return "Bearish"
+
+    return "Mixed"
 
 
-# =====================================================================
-# CHART BUILDER
-# =====================================================================
+# ============================================================
+# SUPPORT / RESISTANCE
+# ============================================================
 
-def build_chart(data, ticker, opts, analysis, sr_data):
-    has_volume = opts["volume"] and "Volume" in data.columns
-    has_rsi = opts["rsi"] and "RSI_14" in data.columns
+def get_basic_levels(df):
 
-    rows = {"price": 1}
-    heights = [0.60]
-    if has_volume:
-        rows["volume"] = len(rows) + 1
+    if df is None or df.empty:
+        return np.nan, np.nan
+
+    recent = df.tail(50)
+
+    price = float(df["Close"].iloc[-1])
+
+    supports = []
+
+    resistance = []
+
+    for window in [20, 50]:
+
+        low = recent["Low"].rolling(window).min().iloc[-1]
+
+        high = recent["High"].rolling(window).max().iloc[-1]
+
+        if not pd.isna(low) and low < price:
+            supports.append(low)
+
+        if not pd.isna(high) and high > price:
+            resistance.append(high)
+
+    support = max(supports) if supports else np.nan
+    resist = min(resistance) if resistance else np.nan
+
+    return support, resist
+
+
+# ============================================================
+# CHART
+# ============================================================
+
+def build_chart(
+    df,
+    history_days=120,
+    show_sr=True,
+    show_swing=False,
+    show_rolling=False,
+    show_previous=False,
+    show_fib=False,
+    show_pivot=False,
+    show_atr=False,
+    show_ema=False,
+    show_bollinger=False,
+    show_volume=True,
+    show_rsi=False,
+):
+
+    data = df.tail(history_days).copy()
+
+    rows = 1
+
+    if show_volume:
+        rows += 1
+
+    if show_rsi:
+        rows += 1
+
+    heights = [0.62]
+
+    if show_volume:
         heights.append(0.20)
-    if has_rsi:
-        rows["rsi"] = len(rows) + 1
-        heights.append(0.20)
 
-    total = sum(heights)
-    heights = [h / total for h in heights]
+    if show_rsi:
+        heights.append(0.18)
 
     fig = make_subplots(
-        rows=len(rows), cols=1, shared_xaxes=True,
-        vertical_spacing=0.03, row_heights=heights,
+        rows=rows,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.025,
+        row_heights=heights,
     )
+
+    # --------------------------------------------------------
+    # Candles
+    # --------------------------------------------------------
 
     fig.add_trace(
         go.Candlestick(
-            x=data.index, open=data["Open"], high=data["High"],
-            low=data["Low"], close=data["Close"], name=ticker,
+            x=data.index,
+            open=data["Open"],
+            high=data["High"],
+            low=data["Low"],
+            close=data["Close"],
+            increasing_line_color="#00E676",
+            decreasing_line_color="#FF4D5A",
+            increasing_fillcolor="#00E676",
+            decreasing_fillcolor="#FF4D5A",
+            name="Price",
         ),
-        row=1, col=1,
+        row=1,
+        col=1,
     )
 
-    if opts["ema20"] and "EMA_20" in data.columns:
-        fig.add_trace(go.Scatter(x=data.index, y=data["EMA_20"], mode="lines", name="EMA 20", line=dict(color="#FFA726", width=1.6)), row=1, col=1)
+    # --------------------------------------------------------
+    # EMA / MA
+    # --------------------------------------------------------
 
-    if opts["ema50"] and "EMA_50" in data.columns:
-        fig.add_trace(go.Scatter(x=data.index, y=data["EMA_50"], mode="lines", name="EMA 50", line=dict(color="#AB47BC", width=1.5)), row=1, col=1)
+    if show_ema:
 
-    if opts["ma200"] and "MA_200" in data.columns and data["MA_200"].notna().any():
-        fig.add_trace(go.Scatter(x=data.index, y=data["MA_200"], mode="lines", name="MA 200", line=dict(color="#29B6F6", width=1.8)), row=1, col=1)
+        for col, name, dash in [
+            ("EMA20", "EMA 20", "solid"),
+            ("EMA50", "EMA 50", "dot"),
+            ("MA200", "MA 200", "dash"),
+        ]:
 
-    current_price = safe_float(data.attrs.get("current_price"))
-    if not np.isnan(current_price):
-        fig.add_hline(y=current_price, line_dash="dash", line_color="white", line_width=1.5, annotation_text=f"السعر الحالي: {current_price:,.2f}", annotation_position="top left", row=1, col=1)
+            if col in data.columns:
 
-    if opts["support_resistance"]:
-        for idx, zone in enumerate(sr_data.get("supports", []), start=1):
-            low, high, center = zone
-            fig.add_hrect(y0=low, y1=high, fillcolor="rgba(46,204,113,0.08)", line_width=0, row=1, col=1)
-            fig.add_hline(y=center, line_dash="dot", line_color="rgba(46,204,113,0.75)", annotation_text=f"S{idx}: {center:,.2f}", annotation_position="bottom right", row=1, col=1)
+                fig.add_trace(
+                    go.Scatter(
+                        x=data.index,
+                        y=data[col],
+                        mode="lines",
+                        name=name,
+                        line=dict(
+                            width=1.4,
+                            dash=dash,
+                        ),
+                    ),
+                    row=1,
+                    col=1,
+                )
 
-        for idx, zone in enumerate(sr_data.get("resistances", []), start=1):
-            low, high, center = zone
-            fig.add_hrect(y0=low, y1=high, fillcolor="rgba(239,83,80,0.08)", line_width=0, row=1, col=1)
-            fig.add_hline(y=center, line_dash="dot", line_color="rgba(239,83,80,0.75)", annotation_text=f"R{idx}: {center:,.2f}", annotation_position="top right", row=1, col=1)
+    # --------------------------------------------------------
+    # Bollinger
+    # --------------------------------------------------------
 
-    if opts["fibonacci"]:
-        for ratio, level in calc_fibonacci(data).items():
-            fig.add_hline(y=level, line_dash="dot", line_color="white", annotation_text=f"Fib {ratio}: {level:,.2f}", annotation_position="top left", row=1, col=1)
+    if show_bollinger:
 
-    if has_volume:
-        colors = ["#26A69A" if close >= open_ else "#EF5350" for open_, close in zip(data["Open"], data["Close"])]
-        fig.add_trace(go.Bar(x=data.index, y=data["Volume"], marker_color=colors, name="الحجم", showlegend=False), row=rows["volume"], col=1)
+        if "BB_UPPER" in data.columns:
 
-    if has_rsi:
-        fig.add_trace(go.Scatter(x=data.index, y=data["RSI_14"], mode="lines", name="RSI 14", line=dict(color="#AB47BC", width=1.6)), row=rows["rsi"], col=1)
-        fig.add_hline(y=70, line_dash="dash", line_color="red", row=rows["rsi"], col=1)
-        fig.add_hline(y=30, line_dash="dash", line_color="green", row=rows["rsi"], col=1)
+            fig.add_trace(
+                go.Scatter(
+                    x=data.index,
+                    y=data["BB_UPPER"],
+                    mode="lines",
+                    name="BB Upper",
+                    line=dict(
+                        width=1,
+                        dash="dot",
+                    ),
+                ),
+                row=1,
+                col=1,
+            )
+
+        if "BB_LOWER" in data.columns:
+
+            fig.add_trace(
+                go.Scatter(
+                    x=data.index,
+                    y=data["BB_LOWER"],
+                    mode="lines",
+                    name="BB Lower",
+                    line=dict(
+                        width=1,
+                        dash="dot",
+                    ),
+                ),
+                row=1,
+                col=1,
+            )
+
+    price = float(data["Close"].iloc[-1])
+
+    # --------------------------------------------------------
+    # S/R
+    # --------------------------------------------------------
+
+    support, resistance = get_basic_levels(data)
+
+    if show_sr:
+
+        if not pd.isna(support):
+
+            fig.add_hline(
+                y=support,
+                line_dash="dot",
+                line_width=1,
+                annotation_text=f"Support {support:.2f}",
+                annotation_position="bottom left",
+                row=1,
+                col=1,
+            )
+
+        if not pd.isna(resistance):
+
+            fig.add_hline(
+                y=resistance,
+                line_dash="dot",
+                line_width=1,
+                annotation_text=f"Resistance {resistance:.2f}",
+                annotation_position="top left",
+                row=1,
+                col=1,
+            )
+
+    # --------------------------------------------------------
+    # 20 / 50 HIGH LOW
+    # --------------------------------------------------------
+
+    if show_rolling:
+
+        for n in [20, 50]:
+
+            high = data["High"].rolling(n).max().iloc[-1]
+            low = data["Low"].rolling(n).min().iloc[-1]
+
+            if not pd.isna(high):
+
+                fig.add_hline(
+                    y=high,
+                    line_dash="dot",
+                    line_width=0.8,
+                    annotation_text=f"{n}D High",
+                    row=1,
+                    col=1,
+                )
+
+            if not pd.isna(low):
+
+                fig.add_hline(
+                    y=low,
+                    line_dash="dot",
+                    line_width=0.8,
+                    annotation_text=f"{n}D Low",
+                    row=1,
+                    col=1,
+                )
+
+    # --------------------------------------------------------
+    # Previous High / Low
+    # --------------------------------------------------------
+
+    if show_previous and len(data) >= 2:
+
+        previous = data.iloc[-2]
+
+        for level, label in [
+            (previous["High"], "Prev High"),
+            (previous["Low"], "Prev Low"),
+        ]:
+
+            fig.add_hline(
+                y=level,
+                line_dash="dash",
+                line_width=1,
+                annotation_text=label,
+                row=1,
+                col=1,
+            )
+
+    # --------------------------------------------------------
+    # Fibonacci
+    # --------------------------------------------------------
+
+    if show_fib:
+
+        swing_high = float(data["High"].max())
+        swing_low = float(data["Low"].min())
+
+        diff = swing_high - swing_low
+
+        if diff > 0:
+
+            for ratio in [0.236, 0.382, 0.5, 0.618, 0.786]:
+
+                level = swing_high - diff * ratio
+
+                fig.add_hline(
+                    y=level,
+                    line_dash="dot",
+                    line_width=0.7,
+                    annotation_text=f"Fib {ratio:.3f}",
+                    row=1,
+                    col=1,
+                )
+
+    # --------------------------------------------------------
+    # Pivot
+    # --------------------------------------------------------
+
+    if show_pivot and len(data) >= 2:
+
+        prev = data.iloc[-2]
+
+        pp = (
+            prev["High"] +
+            prev["Low"] +
+            prev["Close"]
+        ) / 3
+
+        r1 = 2 * pp - prev["Low"]
+        s1 = 2 * pp - prev["High"]
+
+        r2 = pp + (
+            prev["High"] -
+            prev["Low"]
+        )
+
+        s2 = pp - (
+            prev["High"] -
+            prev["Low"]
+        )
+
+        for level, label in [
+            (pp, "Pivot"),
+            (r1, "R1"),
+            (r2, "R2"),
+            (s1, "S1"),
+            (s2, "S2"),
+        ]:
+
+            fig.add_hline(
+                y=level,
+                line_dash="dot",
+                line_width=0.7,
+                annotation_text=label,
+                row=1,
+                col=1,
+            )
+
+    # --------------------------------------------------------
+    # ATR
+    # --------------------------------------------------------
+
+    if show_atr and "ATR14" in data.columns:
+
+        atr = safe_float(data["ATR14"].iloc[-1])
+
+        if not pd.isna(atr):
+
+            for multiplier, label in [
+                (1, "ATR -1"),
+                (2, "ATR -2"),
+            ]:
+
+                fig.add_hline(
+                    y=price - atr * multiplier,
+                    line_dash="dash",
+                    line_width=0.8,
+                    annotation_text=label,
+                    row=1,
+                    col=1,
+                )
+
+            for multiplier, label in [
+                (1, "ATR +1"),
+                (2, "ATR +2"),
+            ]:
+
+                fig.add_hline(
+                    y=price + atr * multiplier,
+                    line_dash="dash",
+                    line_width=0.8,
+                    annotation_text=label,
+                    row=1,
+                    col=1,
+                )
+
+    # --------------------------------------------------------
+    # Current Price
+    # --------------------------------------------------------
+
+    fig.add_hline(
+        y=price,
+        line_dash="solid",
+        line_width=1.2,
+        annotation_text=f"Historical Close {price:.2f}",
+        annotation_position="top right",
+        row=1,
+        col=1,
+    )
+
+    # --------------------------------------------------------
+    # Volume
+    # --------------------------------------------------------
+
+    current_row = 2
+
+    if show_volume:
+
+        fig.add_trace(
+            go.Bar(
+                x=data.index,
+                y=data["Volume"],
+                name="Volume",
+                opacity=0.55,
+            ),
+            row=current_row,
+            col=1,
+        )
+
+        current_row += 1
+
+    # --------------------------------------------------------
+    # RSI
+    # --------------------------------------------------------
+
+    if show_rsi and "RSI14" in data.columns:
+
+        fig.add_trace(
+            go.Scatter(
+                x=data.index,
+                y=data["RSI14"],
+                mode="lines",
+                name="RSI 14",
+                line=dict(width=1.4),
+            ),
+            row=current_row,
+            col=1,
+        )
+
+        fig.add_hline(
+            y=70,
+            line_dash="dot",
+            line_width=0.7,
+            row=current_row,
+            col=1,
+        )
+
+        fig.add_hline(
+            y=30,
+            line_dash="dot",
+            line_width=0.7,
+            row=current_row,
+            col=1,
+        )
+
+    # --------------------------------------------------------
+    # Layout
+    # --------------------------------------------------------
 
     fig.update_layout(
+        height=750,
         template="plotly_dark",
-        height=600 + 150 * (len(rows) - 1),
+        paper_bgcolor="#050607",
+        plot_bgcolor="#080A0C",
+        font=dict(
+            color="#DDE2E8",
+            size=11,
+        ),
+        margin=dict(
+            l=10,
+            r=10,
+            t=35,
+            b=10,
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.01,
+            xanchor="left",
+            x=0,
+            bgcolor="rgba(0,0,0,0)",
+        ),
         xaxis_rangeslider_visible=False,
         hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-        margin=dict(l=10, r=10, t=60, b=10),
     )
+
+    fig.update_xaxes(
+        showgrid=True,
+        gridcolor="#15191E",
+        zeroline=False,
+    )
+
+    fig.update_yaxes(
+        showgrid=True,
+        gridcolor="#15191E",
+        zeroline=False,
+    )
+
     return fig
 
 
-# =====================================================================
-# MAIN INTERFACE
-# =====================================================================
+# ============================================================
+# RADAR CHART
+# ============================================================
 
-st.title("📈 لوحة تحليل الأسهم المصرية (EGX Smart Dashboard)")
-st.markdown("موقعك الاحترافي المتقدم لمتابعة الشموع اليابانية، المؤشرات الفنية، الدعم والمقاومة وأدوات القياس.")
+def build_radar(analysis):
 
-stocks = normalize_stock_list(EGX_STOCKS)
-if not stocks:
-    st.error("لم يتم العثور على EGX_STOCKS في config.py")
-    st.stop()
+    categories = [
+        "Trend",
+        "Momentum",
+        "Volume",
+        "Price Action",
+        "Money Flow",
+        "Volatility",
+        "Strength",
+    ]
 
-col_s1, col_s2, col_s3 = st.columns([3, 1, 1])
-with col_s1:
-    selected_ticker = st.selectbox("🔎 اختر أو ابحث عن السهم:", stocks, index=0)
-with col_s2:
-    history_days = st.selectbox("عدد الجلسات", [60, 120, 200, 365, 500], index=1)
-with col_s3:
-    if st.button("🔄 تحديث البيانات", use_container_width=True):
+    values = [
+        normalize_score(
+            analysis.get("trend_score"), 20
+        ),
+        normalize_score(
+            analysis.get("momentum_score"), 15
+        ),
+        normalize_score(
+            analysis.get("volume_score"), 15
+        ),
+        normalize_score(
+            analysis.get("price_action_score"), 15
+        ),
+        normalize_score(
+            analysis.get("money_flow_score"), 10
+        ),
+        normalize_score(
+            analysis.get("volatility_score"), 5
+        ),
+        normalize_score(
+            analysis.get("price_strength_score"), 5
+        ),
+    ]
+
+    categories += [categories[0]]
+    values += [values[0]]
+
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatterpolar(
+            r=values,
+            theta=categories,
+            fill="toself",
+            name="legend-Mo",
+            line=dict(
+                width=2,
+            ),
+        )
+    )
+
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="#0A0D10",
+        plot_bgcolor="#0A0D10",
+        height=330,
+        margin=dict(
+            l=35,
+            r=35,
+            t=20,
+            b=20,
+        ),
+        polar=dict(
+            bgcolor="#0A0D10",
+            radialaxis=dict(
+                visible=True,
+                range=[0, 100],
+                gridcolor="#252B32",
+                linecolor="#252B32",
+                tickfont=dict(
+                    color="#646C76",
+                    size=8,
+                ),
+            ),
+            angularaxis=dict(
+                gridcolor="#252B32",
+                linecolor="#252B32",
+                tickfont=dict(
+                    color="#9BA2AB",
+                    size=9,
+                ),
+            ),
+        ),
+        showlegend=False,
+    )
+
+    return fig
+
+
+# ============================================================
+# LOAD ANALYSIS
+# ============================================================
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_market_prices():
+
+    try:
+        return fetch_mubasher_prices()
+    except Exception:
+        return {}
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_analysis(symbol, mubasher_prices):
+
+    df, source = get_stock_data(
+        symbol,
+        mubasher_prices
+    )
+
+    if df is None or df.empty:
+        return None, None
+
+    historical_close = safe_float(
+        df.attrs.get(
+            "historical_close",
+            df["Close"].iloc[-1]
+        )
+    )
+
+    current_price = safe_float(
+        df.attrs.get(
+            "current_price",
+            historical_close
+        )
+    )
+
+    price_source = df.attrs.get(
+        "price_source",
+        source
+    )
+
+    is_realtime = bool(
+        df.attrs.get(
+            "is_realtime",
+            False
+        )
+    )
+
+    change_pct = (
+        (current_price / historical_close - 1) * 100
+        if historical_close
+        else np.nan
+    )
+
+    # IMPORTANT:
+    # Indicators remain based on Yahoo historical Close.
+    data = calculate_indicators(df.copy())
+
+    analysis = evaluate_stock_strategy(
+        data
+    )
+
+    if analysis is None:
+        return data, None
+
+    # Attach metadata
+    analysis["current_price"] = current_price
+    analysis["historical_close"] = historical_close
+    analysis["price_source"] = price_source
+    analysis["is_realtime"] = is_realtime
+    analysis["current_vs_close_pct"] = change_pct
+
+    return data, analysis
+
+
+# ============================================================
+# HEADER
+# ============================================================
+
+st.markdown(
+    """
+<div style="display:flex;justify-content:space-between;
+            align-items:flex-end;margin-bottom:20px;">
+
+<div>
+    <div class="brand">legend-Mo <span>LENS</span></div>
+    <div class="brand-sub">
+        EGX TECHNICAL INTELLIGENCE
+    </div>
+</div>
+
+<div style="text-align:right;">
+    <div class="label">ANALYTICAL ENGINE</div>
+    <div style="font-size:13px;color:#B6BDC6;">
+        Technical • Momentum • Flow • Risk
+    </div>
+</div>
+
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+
+# ============================================================
+# SIDEBAR
+# ============================================================
+
+with st.sidebar:
+
+    st.markdown(
+        """
+        <div style="
+            font-size:20px;
+            font-weight:800;
+            margin-bottom:15px;
+        ">
+        🖤 legend-Mo
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("### Market")
+
+    # EGX universe from config
+    try:
+        from config import EGX_STOCKS
+
+        stock_list = list(EGX_STOCKS)
+
+    except Exception:
+
+        stock_list = [
+            "COMI",
+            "SWDY",
+            "EFIH",
+            "FWRY",
+            "TMGH",
+            "ORAS",
+            "MASR",
+            "SPMD",
+            "EXPA",
+            "ACGC",
+            "NIPH",
+            "KORA",
+            "GTWL",
+            "MILS",
+            "SIPC",
+        ]
+
+    symbol = st.selectbox(
+        "Select Stock",
+        stock_list,
+        index=0,
+    )
+
+    st.markdown("---")
+
+    history_days = st.slider(
+        "Chart History",
+        min_value=30,
+        max_value=300,
+        value=120,
+        step=10,
+    )
+
+    st.markdown("### Chart Tools")
+
+    show_sr = st.toggle(
+        "Support / Resistance",
+        value=True,
+    )
+
+    show_swing = st.toggle(
+        "Swing High / Low",
+        value=False,
+    )
+
+    show_rolling = st.toggle(
+        "20D / 50D High-Low",
+        value=False,
+    )
+
+    show_previous = st.toggle(
+        "Previous High / Low",
+        value=False,
+    )
+
+    show_fib = st.toggle(
+        "Fibonacci",
+        value=False,
+    )
+
+    show_pivot = st.toggle(
+        "Pivot Points",
+        value=False,
+    )
+
+    show_atr = st.toggle(
+        "ATR Zones",
+        value=False,
+    )
+
+    show_ema = st.toggle(
+        "EMA 20 / 50 / MA 200",
+        value=True,
+    )
+
+    show_bollinger = st.toggle(
+        "Bollinger Bands",
+        value=False,
+    )
+
+    show_volume = st.toggle(
+        "Volume",
+        value=True,
+    )
+
+    show_rsi = st.toggle(
+        "RSI",
+        value=False,
+    )
+
+    st.markdown("---")
+
+    if st.button(
+        "🔄 Refresh Data",
+        use_container_width=True,
+    ):
+
         st.cache_data.clear()
         st.rerun()
 
-st.markdown("---")
-mubasher_prices = load_mubasher()
-with st.spinner(f"جاري جلب وتحليل بيانات {selected_ticker}..."):
+
+# ============================================================
+# LOAD
+# ============================================================
+
+with st.spinner("Loading market intelligence..."):
+
     try:
-        df, analysis = load_analysis(selected_ticker, mubasher_prices)
+
+        mubasher_prices = load_market_prices()
+
+        df, analysis = load_analysis(
+            symbol,
+            mubasher_prices
+        )
+
     except Exception as e:
-        st.error(f"⚠️ حدث خطأ أثناء تحليل {selected_ticker}: {e}")
+
+        st.error(
+            f"Data error: {e}"
+        )
+
         st.stop()
 
-if df is None or df.empty:
-    st.error(f"⚠️ تعذر جلب بيانات كافية للسهم {selected_ticker}")
+
+if df is None or analysis is None:
+
+    st.warning(
+        "No valid analysis available for this symbol."
+    )
+
     st.stop()
 
-historical_close = safe_float(df.attrs.get("historical_close"))
-current_price = safe_float(df.attrs.get("current_price"))
-price_source = df.attrs.get("price_source", "غير محدد")
-is_realtime = df.attrs.get("is_realtime", False)
-current_vs_close_pct = safe_float(df.attrs.get("current_vs_close_pct"))
 
-if np.isnan(historical_close): historical_close = safe_float(df["Close"].iloc[-1])
-if np.isnan(current_price): current_price = historical_close
+# ============================================================
+# CURRENT PRICE
+# ============================================================
 
-last = df.iloc[-1]
-rsi = safe_float(last.get("RSI_14"))
-volume_ratio = safe_float(last.get("Volume_Ratio"))
-risk_score = calculate_risk_score(df, current_price)
-structure_data = detect_market_structure(df)
-supports, resistances = find_support_resistance(df, current_price)
+current_price = safe_float(
+    analysis.get("current_price")
+)
 
-# =====================================================================
-# TOP METRICS
-# =====================================================================
+historical_close = safe_float(
+    analysis.get("historical_close")
+)
 
-c1, c2, c3, c4, c5, c6 = st.columns(6)
-with c1:
-    st.metric("السعر الحالي", fmt(current_price, 2, " ج.م"), f"{current_vs_close_pct:+.2f}%" if not np.isnan(current_vs_close_pct) else None)
-with c2:
-    st.metric("آخر إغلاق Yahoo", fmt(historical_close, 2, " ج.م"))
-with c3:
-    if analysis:
-        st.metric("التقييم (Score)", f"{analysis.get('score', '—')} / 100", analysis.get("rec", ""), delta_color="off")
+change_pct = safe_float(
+    analysis.get("current_vs_close_pct")
+)
+
+source = analysis.get(
+    "price_source",
+    "Yahoo Finance"
+)
+
+realtime = bool(
+    analysis.get(
+        "is_realtime",
+        False
+    )
+)
+
+
+# ============================================================
+# HERO STOCK CARD
+# ============================================================
+
+trend = trend_description(df)
+
+score = clamp(
+    analysis.get("score", 0)
+)
+
+score_class = score_color(score)
+
+recommendation = analysis.get(
+    "recommendation",
+    "—"
+)
+
+st.markdown(
+    f"""
+<div class="lm-card">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+">
+
+<div>
+
+<div class="label">EGX EQUITY</div>
+
+<div style="
+font-size:34px;
+font-weight:800;
+margin-top:4px;
+">
+{symbol}
+</div>
+
+<div style="
+color:#707883;
+font-size:11px;
+margin-top:4px;
+">
+legend-Mo Lens Analysis
+</div>
+
+</div>
+
+<div style="text-align:right;">
+
+<div class="label">CURRENT PRICE</div>
+
+<div class="big-value">
+{fmt(current_price)}
+</div>
+
+<div class="{('green' if change_pct >= 0 else 'red')}"
+style="font-size:13px;font-weight:700;margin-top:5px;">
+
+{'▲' if change_pct >= 0 else '▼'}
+{pct(abs(change_pct))}
+
+</div>
+
+</div>
+
+</div>
+
+<div class="divider"></div>
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+">
+
+<div>
+
+<span class="label">PRICE SOURCE</span><br>
+
+<span style="font-size:12px;color:#B8BEC6;">
+{source}
+{' • LIVE' if realtime else ' • FALLBACK'}
+</span>
+
+</div>
+
+<div>
+
+<span class="label">HISTORICAL CLOSE</span><br>
+
+<span style="font-size:12px;color:#B8BEC6;">
+{fmt(historical_close)}
+</span>
+
+</div>
+
+<div>
+
+<span class="label">TREND</span><br>
+
+<span class="{('green' if trend == 'Bullish' else 'red' if trend == 'Bearish' else 'yellow')}"
+style="font-size:13px;font-weight:700;">
+{trend}
+</span>
+
+</div>
+
+<div>
+
+<span class="label">SIGNAL</span><br>
+
+<span style="font-size:13px;font-weight:700;color:#EDEFF2;">
+{recommendation}
+</span>
+
+</div>
+
+</div>
+
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+
+# ============================================================
+# SCORE + QUICK METRICS
+# ============================================================
+
+col1, col2, col3, col4, col5 = st.columns(
+    [1.25, 1, 1, 1, 1]
+)
+
+
+with col1:
+
+    st.markdown(
+        f"""
+        <div class="lm-card" style="height:145px;">
+
+        <div class="score-label">
+        LEGEND-MO SCORE
+        </div>
+
+        <div class="score-number {score_class}">
+        {score:.0f}
+        </div>
+
+        <div style="
+        color:#737B85;
+        font-size:11px;
+        margin-top:7px;
+        ">
+        / 100 • {score_text(score)}
+        </div>
+
+        <div class="progress-bg">
+            <div class="progress-fill"
+                 style="width:{score:.0f}%;">
+            </div>
+        </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+with col2:
+
+    rsi = safe_float(
+        df["RSI14"].iloc[-1]
+        if "RSI14" in df.columns
+        else np.nan
+    )
+
+    st.markdown(
+        f"""
+        <div class="lm-card" style="height:145px;">
+        <div class="label">RSI 14</div>
+        <div class="metric-value">{fmt(rsi,1)}</div>
+        <div class="metric-sub">Momentum</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+with col3:
+
+    adx = safe_float(
+        df["ADX14"].iloc[-1]
+        if "ADX14" in df.columns
+        else np.nan
+    )
+
+    st.markdown(
+        f"""
+        <div class="lm-card" style="height:145px;">
+        <div class="label">ADX</div>
+        <div class="metric-value">{fmt(adx,1)}</div>
+        <div class="metric-sub">Trend Strength</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+with col4:
+
+    volume_ratio = safe_float(
+        df["Volume_Ratio"].iloc[-1]
+        if "Volume_Ratio" in df.columns
+        else np.nan
+    )
+
+    st.markdown(
+        f"""
+        <div class="lm-card" style="height:145px;">
+        <div class="label">VOLUME RATIO</div>
+        <div class="metric-value">{fmt(volume_ratio,2)}x</div>
+        <div class="metric-sub">Trading Activity</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+with col5:
+
+    atr = safe_float(
+        df["ATR14"].iloc[-1]
+        if "ATR14" in df.columns
+        else np.nan
+    )
+
+    atr_pct = (
+        atr / historical_close * 100
+        if historical_close and not pd.isna(atr)
+        else np.nan
+    )
+
+    st.markdown(
+        f"""
+        <div class="lm-card" style="height:145px;">
+        <div class="label">ATR %</div>
+        <div class="metric-value">{fmt(atr_pct,2)}%</div>
+        <div class="metric-sub">Volatility</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================
+# SCORE BREAKDOWN
+# ============================================================
+
+st.markdown("## Score Intelligence")
+
+left, right = st.columns(
+    [1.2, 1]
+)
+
+
+with left:
+
+    st.markdown(
+        """
+        <div class="lm-card">
+        <div class="label">LEGEND-MO SCORE BREAKDOWN</div>
+        <div style="height:10px;"></div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    breakdown = {
+        "Trend": (
+            analysis.get("trend_score", 0),
+            20,
+        ),
+        "Momentum": (
+            analysis.get("momentum_score", 0),
+            15,
+        ),
+        "Volume": (
+            analysis.get("volume_score", 0),
+            15,
+        ),
+        "Price Action": (
+            analysis.get("price_action_score", 0),
+            15,
+        ),
+        "Support / Resistance": (
+            analysis.get("sr_score", 0),
+            15,
+        ),
+        "Money Flow": (
+            analysis.get("money_flow_score", 0),
+            10,
+        ),
+        "Volatility": (
+            analysis.get("volatility_score", 0),
+            5,
+        ),
+        "Price Strength": (
+            analysis.get("price_strength_score", 0),
+            5,
+        ),
+    }
+
+    for name, (value, maximum) in breakdown.items():
+
+        val = clamp(
+            safe_float(value, 0),
+            0,
+            maximum
+        )
+
+        percentage = (
+            val / maximum * 100
+            if maximum
+            else 0
+        )
+
+        st.markdown(
+            f"""
+            <div style="
+                margin-bottom:12px;
+            ">
+
+            <div style="
+                display:flex;
+                justify-content:space-between;
+                font-size:12px;
+            ">
+
+            <span style="color:#B8BEC6;">
+            {name}
+            </span>
+
+            <span style="
+                color:#F1F3F5;
+                font-weight:700;
+            ">
+            {val:.1f} / {maximum}
+            </span>
+
+            </div>
+
+            <div class="progress-bg">
+                <div class="progress-fill"
+                     style="width:{percentage:.1f}%;">
+                </div>
+            </div>
+
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+with right:
+
+    st.markdown(
+        """
+        <div class="lm-card">
+        <div class="label">TECHNICAL RADAR</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.plotly_chart(
+        build_radar(analysis),
+        use_container_width=True,
+        config={
+            "displayModeBar": False
+        },
+    )
+
+    st.markdown(
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================
+# SCENARIOS
+# ============================================================
+
+scenarios = calculate_scenarios(
+    analysis
+)
+
+st.markdown("## Market Scenario")
+
+c1, c2, c3 = st.columns(3)
+
+for col, title, value, cls in [
+    (c1, "BULLISH", scenarios["Bullish"], "green"),
+    (c2, "SIDEWAYS", scenarios["Sideways"], "yellow"),
+    (c3, "BEARISH", scenarios["Bearish"], "red"),
+]:
+
+    with col:
+
+        st.markdown(
+            f"""
+            <div class="scenario">
+
+            <div class="scenario-title">
+            {title}
+            </div>
+
+            <div class="scenario-value {cls}">
+            {value:.0f}%
+            </div>
+
+            <div class="progress-bg">
+                <div class="progress-fill"
+                     style="width:{value:.0f}%;">
+                </div>
+            </div>
+
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+st.caption(
+    "Scenario percentages are heuristic model estimates based on the "
+    "Legend-Mo scoring engine, not statistically calibrated probabilities."
+)
+
+
+# ============================================================
+# PRICE CHART
+# ============================================================
+
+st.markdown("## Price Action Lab")
+
+chart = build_chart(
+    df=df,
+    history_days=history_days,
+    show_sr=show_sr,
+    show_swing=show_swing,
+    show_rolling=show_rolling,
+    show_previous=show_previous,
+    show_fib=show_fib,
+    show_pivot=show_pivot,
+    show_atr=show_atr,
+    show_ema=show_ema,
+    show_bollinger=show_bollinger,
+    show_volume=show_volume,
+    show_rsi=show_rsi,
+)
+
+st.plotly_chart(
+    chart,
+    use_container_width=True,
+    config={
+        "displaylogo": False,
+        "scrollZoom": True,
+        "displayModeBar": True,
+    },
+)
+
+
+# ============================================================
+# MONEY FLOW + SELLING PRESSURE
+# ============================================================
+
+selling_pressure = calculate_selling_pressure(df)
+
+money_col, pressure_col, strength_col = st.columns(3)
+
+
+with money_col:
+
+    money_score = normalize_score(
+        analysis.get("money_flow_score"),
+        10
+    )
+
+    st.markdown(
+        f"""
+        <div class="lm-card">
+
+        <div class="label">
+        MONEY FLOW
+        </div>
+
+        <div class="big-value">
+        {money_score:.0f}
+        </div>
+
+        <div class="metric-sub">
+        / 100
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="signal-box">
+        <div class="signal-title">
+        ACCUMULATION / DISTRIBUTION
+        </div>
+
+        <div class="signal-value">
+        {
+            "Accumulation"
+            if money_score >= 60
+            else "Distribution"
+            if money_score < 40
+            else "Neutral"
+        }
+        </div>
+        </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+with pressure_col:
+
+    pressure_class = (
+        "red"
+        if selling_pressure >= 65
+        else "yellow"
+        if selling_pressure >= 45
+        else "green"
+    )
+
+    pressure_text = (
+        "High"
+        if selling_pressure >= 65
+        else "Moderate"
+        if selling_pressure >= 45
+        else "Low"
+    )
+
+    st.markdown(
+        f"""
+        <div class="lm-card">
+
+        <div class="label">
+        SELLING PRESSURE
+        </div>
+
+        <div class="big-value {pressure_class}">
+        {selling_pressure:.0f}
+        </div>
+
+        <div class="metric-sub">
+        / 100
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="signal-box">
+        <div class="signal-title">
+        PRESSURE STATUS
+        </div>
+
+        <div class="signal-value {pressure_class}">
+        {pressure_text}
+        </div>
+        </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+with strength_col:
+
+    strength = normalize_score(
+        analysis.get("price_strength_score"),
+        5
+    )
+
+    st.markdown(
+        f"""
+        <div class="lm-card">
+
+        <div class="label">
+        PRICE STRENGTH
+        </div>
+
+        <div class="big-value">
+        {strength:.0f}
+        </div>
+
+        <div class="metric-sub">
+        / 100
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="signal-box">
+        <div class="signal-title">
+        52 WEEK POSITION
+        </div>
+
+        <div class="signal-value">
+        {
+            fmt(
+                df["Position_52W"].iloc[-1] * 100,
+                1
+            ) + "%"
+            if "Position_52W" in df.columns
+            else "—"
+        }
+        </div>
+        </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================
+# SUPPORT / RESISTANCE + 52W RANGE
+# ============================================================
+
+support, resistance = get_basic_levels(df)
+
+range_col, level_col = st.columns(2)
+
+
+with range_col:
+
+    if "52W_Low" in df.columns:
+        low52 = safe_float(
+            df["52W_Low"].iloc[-1]
+        )
     else:
-        st.metric("التقييم (Score)", "—")
-with c4:
-    st.metric("مؤشر RSI", fmt(rsi, 1))
-with c5:
-    st.metric("الدعم الاستراتيجي", fmt(analysis.get("support") if analysis else None, 2, " ج.م"))
-with c6:
-    st.metric("درجة المخاطرة", f"{risk_score}/100", risk_label(risk_score), delta_color="off")
+        low52 = safe_float(
+            df["Low"].tail(252).min()
+        )
 
-# =====================================================================
-# MARKET STRUCTURE
-# =====================================================================
+    if "52W_High" in df.columns:
+        high52 = safe_float(
+            df["52W_High"].iloc[-1]
+        )
+    else:
+        high52 = safe_float(
+            df["High"].tail(252).max()
+        )
 
-st.markdown('<div class="section-title">📐 هيكل السوق والمؤشرات</div>', unsafe_allow_html=True)
-m1, m2, m3 = st.columns(3)
-with m1:
-    st.info(f"**الاتجاه الحالي:** {structure_data['trend']}")
-with m2:
-    st.info(f"**RSI:** {fmt(rsi, 1)}")
-with m3:
-    st.info(f"**Volume Ratio:** {fmt(volume_ratio, 2)}")
+    position = (
+        (historical_close - low52) /
+        (high52 - low52) * 100
+        if high52 > low52
+        else np.nan
+    )
 
-# =====================================================================
-# ANALYSIS TOOLS (التوغلات والأدوات)
-# =====================================================================
+    st.markdown(
+        f"""
+        <div class="lm-card">
 
-st.markdown('<div class="section-title">🎛️ أدوات القياس والتحليل على الشارت</div>', unsafe_allow_html=True)
+        <div class="label">
+        52 WEEK RANGE
+        </div>
 
-t1, t2, t3, t4 = st.columns(4)
-with t1: show_sr = st.toggle("الدعم والمقاومة", value=True)
-with t2: show_swing = st.toggle("Swing High / Low", value=False)
-with t3: show_rolling = st.toggle("20D / 50D High-Low", value=False)
-with t4: show_previous = st.toggle("Previous High / Low", value=False)
+        <div style="
+        display:flex;
+        justify-content:space-between;
+        margin-top:10px;
+        ">
 
-t5, t6, t7 = st.columns(3)
-with t5: show_fibonacci = st.toggle("Fibonacci", value=False)
-with t6: show_pivot = st.toggle("Pivot Points", value=False)
-with t7: show_atr_zones = st.toggle("ATR Zones", value=False)
+        <div>
+        <div class="metric-sub">LOW</div>
+        <div class="metric-value">
+        {fmt(low52)}
+        </div>
+        </div>
 
-i1, i2, i3, i4 = st.columns(4)
-with i1: show_ema20 = st.toggle("EMA 20", value=True)
-with i2: show_ema50 = st.toggle("EMA 50", value=False)
-with i3: show_ma200 = st.toggle("MA 200", value=True)
-with i4: show_bollinger = st.toggle("Bollinger Bands", value=False)
+        <div style="text-align:right;">
+        <div class="metric-sub">HIGH</div>
+        <div class="metric-value">
+        {fmt(high52)}
+        </div>
+        </div>
 
-i5, i6 = st.columns(2)
-with i5: show_volume = st.toggle("حجم التداول", value=True)
-with i6: show_rsi = st.toggle("RSI 14", value=True)
+        </div>
 
-opts = {
-    "support_resistance": show_sr, "swing": show_swing,
-    "rolling_levels": show_rolling, "previous_day": show_previous,
-    "fibonacci": show_fibonacci, "pivot": show_pivot, "atr_zones": show_atr_zones,
-    "ema20": show_ema20, "ema50": show_ema50, "ma200": show_ma200,
-    "bollinger": show_bollinger, "volume": show_volume, "rsi": show_rsi,
+        <div class="progress-bg"
+             style="height:9px;margin-top:15px;">
+
+            <div class="progress-fill"
+                 style="width:{clamp(position):.1f}%;">
+            </div>
+
+        </div>
+
+        <div style="
+        text-align:center;
+        color:#858D97;
+        font-size:11px;
+        margin-top:8px;
+        ">
+        Current Position: {fmt(position,1)}%
+        </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+with level_col:
+
+    st.markdown(
+        f"""
+        <div class="lm-card">
+
+        <div class="label">
+        MARKET STRUCTURE
+        </div>
+
+        <div style="
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:10px;
+        margin-top:15px;
+        ">
+
+        <div class="signal-box">
+        <div class="signal-title">
+        SUPPORT
+        </div>
+
+        <div class="signal-value green">
+        {fmt(support)}
+        </div>
+        </div>
+
+        <div class="signal-box">
+        <div class="signal-title">
+        RESISTANCE
+        </div>
+
+        <div class="signal-value red">
+        {fmt(resistance)}
+        </div>
+        </div>
+
+        </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================
+# TRADE PLAN
+# ============================================================
+
+st.markdown("## Trade Intelligence")
+
+entry = safe_float(
+    analysis.get("entry")
+)
+
+stop_loss = safe_float(
+    analysis.get("stop_loss")
+)
+
+tp1 = safe_float(
+    analysis.get("take_profit_1")
+)
+
+tp2 = safe_float(
+    analysis.get("take_profit_2")
+)
+
+rr1 = safe_float(
+    analysis.get("rr1")
+)
+
+rr2 = safe_float(
+    analysis.get("rr2")
+)
+
+t1, t2, t3, t4, t5 = st.columns(5)
+
+
+trade_cards = [
+    ("ENTRY", entry, ""),
+    ("STOP LOSS", stop_loss, ""),
+    ("TP1", tp1, ""),
+    ("TP2", tp2, ""),
+    ("R/R", rr1, f" / {rr2:.2f}" if not pd.isna(rr2) else ""),
+]
+
+
+for col, (title, value, suffix) in zip(
+    [t1, t2, t3, t4, t5],
+    trade_cards,
+):
+
+    with col:
+
+        display_value = (
+            f"{value:.2f}{suffix}"
+            if not pd.isna(value)
+            else "—"
+        )
+
+        st.markdown(
+            f"""
+            <div class="lm-card"
+                 style="height:125px;">
+
+            <div class="label">
+            {title}
+            </div>
+
+            <div class="metric-value"
+                 style="font-size:23px;">
+            {display_value}
+            </div>
+
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+# ============================================================
+# TECHNICAL MATRIX
+# ============================================================
+
+st.markdown("## Technical Matrix")
+
+row = df.iloc[-1]
+
+technical_data = {
+    "EMA20": row.get("EMA20"),
+    "EMA50": row.get("EMA50"),
+    "MA200": row.get("MA200"),
+    "RSI14": row.get("RSI14"),
+    "ADX14": row.get("ADX14"),
+    "DI+": row.get("DI_PLUS"),
+    "DI-": row.get("DI_MINUS"),
+    "MACD": row.get("MACD"),
+    "MACD Signal": row.get("MACD_Signal"),
+    "MACD Hist": row.get("MACD_Hist"),
+    "ATR14": row.get("ATR14"),
+    "CMF20": row.get("CMF20"),
+    "MFI14": row.get("MFI14"),
+    "ROC20": row.get("ROC20"),
+    "Volume Ratio": row.get("Volume_Ratio"),
 }
 
-# =====================================================================
-# CHART
-# =====================================================================
+tech_df = pd.DataFrame(
+    [
+        {
+            "Indicator": key,
+            "Value": (
+                round(float(value), 4)
+                if not pd.isna(safe_float(value))
+                else "—"
+            ),
+        }
+        for key, value in technical_data.items()
+    ]
+)
 
-chart_df = df.tail(history_days).copy()
-chart_df.attrs.update(df.attrs)
-sr_data = {"supports": supports, "resistances": resistances}
+st.dataframe(
+    tech_df,
+    use_container_width=True,
+    hide_index=True,
+)
 
-fig = build_chart(chart_df, selected_ticker, opts, analysis, sr_data)
-st.plotly_chart(fig, use_container_width=True)
 
-# =====================================================================
-# RECOMMENDATIONS + RISK MANAGEMENT
-# =====================================================================
+# ============================================================
+# REASONS
+# ============================================================
 
-if analysis:
-    st.markdown('<div class="section-title">🎯 التوصيات والأهداف وإدارة المخاطر</div>', unsafe_allow_html=True)
-    col_a, col_b = st.columns(2)
+reasons = analysis.get(
+    "reasons",
+    []
+)
 
-    with col_a:
-        st.subheader("الأهداف الاستثمارية")
-        st.info(f"**منطقة الدخول:** {analysis.get('ideal_entry', '—')} - {analysis.get('entry_high', '—')} ج.م")
-        st.success(f"**الهدف الأول TP1:** {analysis.get('tp1', '—')} ج.م")
-        st.success(f"**الهدف الثاني TP2:** {analysis.get('tp2', '—')} ج.م")
+if reasons:
 
-    with col_b:
-        st.subheader("إدارة المخاطر")
-        st.warning(f"**وقف الخسارة:** {analysis.get('stop_loss', '—')} ج.م ({fmt(analysis.get('stop_loss_pct'), 2, '%')})")
-        st.error(f"**خطة الخروج:** {analysis.get('exit_strategy', '—')}")
+    st.markdown("## Signal Drivers")
 
-    st.markdown("#### الأسباب والتحليل الفني:")
-    for reason in analysis.get("reasons", []):
-        st.write(f"- {reason}")
+    reason_cols = st.columns(
+        min(3, len(reasons))
+    )
 
-st.markdown("---")
-st.caption("⚠️ أدوات التحليل الفني تعتمد على البيانات التاريخية ولا تمثل ضمانًا لحركة السعر المستقبلية.")
+    for i, reason in enumerate(reasons):
+
+        with reason_cols[i % len(reason_cols)]:
+
+            st.markdown(
+                f"""
+                <div class="signal-box"
+                     style="margin-bottom:8px;">
+
+                <span style="
+                color:#DCE1E6;
+                font-size:12px;
+                ">
+                • {reason}
+                </span>
+
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+
+# ============================================================
+# FOOTER
+# ============================================================
+
+st.markdown(
+    """
+    <div class="footer">
+    legend-Mo LENS • EGX TECHNICAL INTELLIGENCE
+    <br>
+    Developed by legend-Mo
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
