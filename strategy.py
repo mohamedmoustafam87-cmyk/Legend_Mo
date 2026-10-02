@@ -1,3 +1,6 @@
+import numpy as np
+import pandas as pd
+
 from config import (
     MIN_SCORE_THRESHOLD,
     MAX_ALLOWABLE_RSI,
@@ -5,960 +8,1968 @@ from config import (
 )
 
 from risk import calculate_risk_management
-
 from indicators import analyze_candlesticks
 
 
 # ==========================================================
-# Strategy Evaluation
+# Helpers
+# ==========================================================
+
+def safe_float(value, default=np.nan):
+
+    try:
+
+        if value is None:
+            return default
+
+        value = float(value)
+
+        if pd.isna(value):
+            return default
+
+        return value
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+
+        return default
+
+
+def clamp(
+    value,
+    minimum=0,
+    maximum=100,
+):
+
+    return max(
+        minimum,
+        min(
+            maximum,
+            value
+        )
+    )
+
+
+def score_positive(
+    value,
+    points,
+):
+
+    return points if value else 0
+
+
+# ==========================================================
+# Trend Score - 20 Points
+# ==========================================================
+
+def calculate_trend_score(last):
+
+    score = 0
+    reasons = []
+
+    close = safe_float(
+        last.get("Close")
+    )
+
+    ema20 = safe_float(
+        last.get("EMA_20")
+    )
+
+    ema50 = safe_float(
+        last.get("EMA_50")
+    )
+
+    ma200 = safe_float(
+        last.get("MA_200")
+    )
+
+    ema50_slope = safe_float(
+        last.get("EMA50_Slope_10D")
+    )
+
+    ma200_slope = safe_float(
+        last.get("MA200_Slope_20D")
+    )
+
+    adx = safe_float(
+        last.get("ADX_14")
+    )
+
+    plus_di = safe_float(
+        last.get("PLUS_DI")
+    )
+
+    minus_di = safe_float(
+        last.get("MINUS_DI")
+    )
+
+    # ------------------------------------------------------
+    # Price > MA200
+    # ------------------------------------------------------
+
+    if (
+        not np.isnan(close)
+        and not np.isnan(ma200)
+        and close > ma200
+    ):
+
+        score += 4
+
+        reasons.append(
+            "السعر أعلى من MA200"
+        )
+
+    # ------------------------------------------------------
+    # EMA20 > EMA50
+    # ------------------------------------------------------
+
+    if (
+        not np.isnan(ema20)
+        and not np.isnan(ema50)
+        and ema20 > ema50
+    ):
+
+        score += 4
+
+        reasons.append(
+            "EMA20 أعلى من EMA50"
+        )
+
+    # ------------------------------------------------------
+    # EMA50 positive slope
+    # ------------------------------------------------------
+
+    if (
+        not np.isnan(ema50_slope)
+        and ema50_slope > 0
+    ):
+
+        score += 3
+
+        reasons.append(
+            "ميل EMA50 إيجابي"
+        )
+
+    # ------------------------------------------------------
+    # MA200 positive slope
+    # ------------------------------------------------------
+
+    if (
+        not np.isnan(ma200_slope)
+        and ma200_slope > 0
+    ):
+
+        score += 3
+
+        reasons.append(
+            "ميل MA200 إيجابي"
+        )
+
+    # ------------------------------------------------------
+    # ADX
+    # ------------------------------------------------------
+
+    if not np.isnan(adx):
+
+        if adx >= 25:
+
+            score += 3
+
+            reasons.append(
+                "ADX يشير إلى اتجاه قوي"
+            )
+
+        elif adx >= 20:
+
+            score += 2
+
+            reasons.append(
+                "ADX يشير إلى اتجاه متوسط"
+            )
+
+    # ------------------------------------------------------
+    # DI confirmation
+    # ------------------------------------------------------
+
+    if (
+        not np.isnan(plus_di)
+        and not np.isnan(minus_di)
+        and plus_di > minus_di
+    ):
+
+        score += 3
+
+        reasons.append(
+            "قوة المشترين أعلى من البائعين (DI+ > DI-)"
+        )
+
+    return (
+        clamp(score, 0, 20),
+        reasons
+    )
+
+
+# ==========================================================
+# Momentum Score - 15 Points
+# ==========================================================
+
+def calculate_momentum_score(last):
+
+    score = 0
+    reasons = []
+
+    rsi = safe_float(
+        last.get("RSI_14")
+    )
+
+    macd = safe_float(
+        last.get("MACD")
+    )
+
+    macd_signal = safe_float(
+        last.get("MACD_Signal")
+    )
+
+    macd_hist = safe_float(
+        last.get("MACD_Hist")
+    )
+
+    roc20 = safe_float(
+        last.get("ROC_20D")
+    )
+
+    roc60 = safe_float(
+        last.get("ROC_60D")
+    )
+
+    # ------------------------------------------------------
+    # RSI
+    # ------------------------------------------------------
+
+    if not np.isnan(rsi):
+
+        if 50 <= rsi <= 65:
+
+            score += 5
+
+            reasons.append(
+                f"RSI إيجابي ومتوازن ({rsi:.1f})"
+            )
+
+        elif 45 <= rsi < 50:
+
+            score += 3
+
+        elif 65 < rsi <= 70:
+
+            score += 3
+
+            reasons.append(
+                f"RSI قوي لكن قريب من التشبع ({rsi:.1f})"
+            )
+
+        elif 35 <= rsi < 45:
+
+            score += 1
+
+        elif rsi < 35:
+
+            score += 2
+
+            reasons.append(
+                f"RSI منخفض ({rsi:.1f})"
+            )
+
+    # ------------------------------------------------------
+    # MACD
+    # ------------------------------------------------------
+
+    if (
+        not np.isnan(macd)
+        and not np.isnan(macd_signal)
+    ):
+
+        if macd > macd_signal:
+
+            score += 4
+
+            reasons.append(
+                "MACD أعلى من Signal"
+            )
+
+        if (
+            not np.isnan(macd_hist)
+            and macd_hist > 0
+        ):
+
+            score += 1
+
+    # ------------------------------------------------------
+    # ROC 20D
+    # ------------------------------------------------------
+
+    if not np.isnan(roc20):
+
+        if roc20 > 5:
+
+            score += 2
+
+            reasons.append(
+                f"العائد خلال 20 جلسة إيجابي ({roc20:.1f}%)"
+            )
+
+        elif roc20 > 0:
+
+            score += 1
+
+    # ------------------------------------------------------
+    # ROC 60D
+    # ------------------------------------------------------
+
+    if not np.isnan(roc60):
+
+        if roc60 > 10:
+
+            score += 3
+
+        elif roc60 > 0:
+
+            score += 1
+
+    return (
+        clamp(score, 0, 15),
+        reasons
+    )
+
+
+# ==========================================================
+# Volume Score - 15 Points
+# ==========================================================
+
+def calculate_volume_score(last):
+
+    score = 0
+    reasons = []
+
+    volume_ratio = safe_float(
+        last.get("Volume_Ratio")
+    )
+
+    breakout_volume = bool(
+        last.get(
+            "Breakout_With_Volume",
+            False
+        )
+    )
+
+    # ------------------------------------------------------
+    # Volume Ratio
+    # ------------------------------------------------------
+
+    if not np.isnan(volume_ratio):
+
+        if volume_ratio >= 2:
+
+            score += 8
+
+            reasons.append(
+                f"حجم تداول قوي جدًا ({volume_ratio:.2f}x)"
+            )
+
+        elif volume_ratio >= 1.5:
+
+            score += 6
+
+            reasons.append(
+                f"حجم التداول أعلى من المتوسط ({volume_ratio:.2f}x)"
+            )
+
+        elif volume_ratio >= 1.0:
+
+            score += 4
+
+        elif volume_ratio >= 0.7:
+
+            score += 2
+
+    # ------------------------------------------------------
+    # Breakout confirmation
+    # ------------------------------------------------------
+
+    if breakout_volume:
+
+        score += 7
+
+        reasons.append(
+            "اختراق مؤكد بحجم تداول مرتفع"
+        )
+
+    return (
+        clamp(score, 0, 15),
+        reasons
+    )
+
+
+# ==========================================================
+# Price Action Score - 15 Points
+# ==========================================================
+
+def calculate_price_action_score(last):
+
+    score = 0
+    reasons = []
+
+    bullish_candle = bool(
+        last.get(
+            "Bullish_Candle",
+            False
+        )
+    )
+
+    strong_bullish = bool(
+        last.get(
+            "Strong_Bullish_Candle",
+            False
+        )
+    )
+
+    hammer = bool(
+        last.get(
+            "Hammer",
+            False
+        )
+    )
+
+    engulfing = bool(
+        last.get(
+            "Bullish_Engulfing",
+            False
+        )
+    )
+
+    breakout = bool(
+        last.get(
+            "Breakout_20",
+            False
+        )
+    )
+
+    breakdown = bool(
+        last.get(
+            "Breakdown_20",
+            False
+        )
+    )
+
+    # ------------------------------------------------------
+    # Bullish candle
+    # ------------------------------------------------------
+
+    if bullish_candle:
+
+        score += 2
+
+    # ------------------------------------------------------
+    # Strong bullish
+    # ------------------------------------------------------
+
+    if strong_bullish:
+
+        score += 4
+
+        reasons.append(
+            "شمعة صاعدة قوية"
+        )
+
+    # ------------------------------------------------------
+    # Hammer
+    # ------------------------------------------------------
+
+    if hammer:
+
+        score += 3
+
+        reasons.append(
+            "ظهور Hammer"
+        )
+
+    # ------------------------------------------------------
+    # Bullish Engulfing
+    # ------------------------------------------------------
+
+    if engulfing:
+
+        score += 4
+
+        reasons.append(
+            "ظهور Bullish Engulfing"
+        )
+
+    # ------------------------------------------------------
+    # Breakout
+    # ------------------------------------------------------
+
+    if breakout:
+
+        score += 2
+
+        reasons.append(
+            "السعر فوق مقاومة 20 جلسة"
+        )
+
+    # ------------------------------------------------------
+    # Breakdown penalty
+    # ------------------------------------------------------
+
+    if breakdown:
+
+        score -= 5
+
+        reasons.append(
+            "السعر كسر دعم 20 جلسة"
+        )
+
+    return (
+        clamp(score, 0, 15),
+        reasons
+    )
+
+
+# ==========================================================
+# Support / Resistance Score - 15 Points
+# ==========================================================
+
+def calculate_sr_score(last):
+
+    score = 0
+    reasons = []
+
+    close = safe_float(
+        last.get("Close")
+    )
+
+    support20 = safe_float(
+        last.get("Support_20")
+    )
+
+    resistance20 = safe_float(
+        last.get("Resistance_20")
+    )
+
+    distance_support = safe_float(
+        last.get(
+            "Distance_From_Support_Pct"
+        )
+    )
+
+    distance_resistance = safe_float(
+        last.get(
+            "Distance_From_Resistance_Pct"
+        )
+    )
+
+    if np.isnan(close):
+
+        return 0, reasons
+
+    # ------------------------------------------------------
+    # Near support
+    # ------------------------------------------------------
+
+    if (
+        not np.isnan(distance_support)
+        and 0 <= distance_support <= 3
+    ):
+
+        score += 6
+
+        reasons.append(
+            "السعر قريب من منطقة دعم"
+        )
+
+    elif (
+        not np.isnan(distance_support)
+        and 3 < distance_support <= 6
+    ):
+
+        score += 3
+
+    # ------------------------------------------------------
+    # Distance from resistance
+    # ------------------------------------------------------
+
+    if (
+        not np.isnan(distance_resistance)
+        and distance_resistance > 5
+    ):
+
+        score += 4
+
+        reasons.append(
+            "مساحة جيدة نسبيًا حتى المقاومة"
+        )
+
+    elif (
+        not np.isnan(distance_resistance)
+        and 2 <= distance_resistance <= 5
+    ):
+
+        score += 2
+
+    # ------------------------------------------------------
+    # Price above support
+    # ------------------------------------------------------
+
+    if (
+        not np.isnan(support20)
+        and close > support20
+    ):
+
+        score += 2
+
+    # ------------------------------------------------------
+    # Price below resistance
+    # ------------------------------------------------------
+
+    if (
+        not np.isnan(resistance20)
+        and close < resistance20
+    ):
+
+        score += 3
+
+    return (
+        clamp(score, 0, 15),
+        reasons
+    )
+
+
+# ==========================================================
+# Money Flow Score - 10 Points
+# ==========================================================
+
+def calculate_money_flow_score(last):
+
+    score = 0
+    reasons = []
+
+    obv_bullish = bool(
+        last.get(
+            "OBV_Bullish",
+            False
+        )
+    )
+
+    obv_slope = safe_float(
+        last.get(
+            "OBV_Slope_10D"
+        )
+    )
+
+    cmf = safe_float(
+        last.get(
+            "CMF_20"
+        )
+    )
+
+    mfi = safe_float(
+        last.get(
+            "MFI_14"
+        )
+    )
+
+    ad_slope = safe_float(
+        last.get(
+            "AD_Slope_20D"
+        )
+    )
+
+    # ------------------------------------------------------
+    # OBV
+    # ------------------------------------------------------
+
+    if obv_bullish:
+
+        score += 3
+
+        reasons.append(
+            "OBV يدعم الاتجاه الصاعد"
+        )
+
+    if (
+        not np.isnan(obv_slope)
+        and obv_slope > 0
+    ):
+
+        score += 1
+
+    # ------------------------------------------------------
+    # CMF
+    # ------------------------------------------------------
+
+    if not np.isnan(cmf):
+
+        if cmf > 0.10:
+
+            score += 3
+
+            reasons.append(
+                f"CMF يشير إلى دخول سيولة ({cmf:.2f})"
+            )
+
+        elif cmf > 0:
+
+            score += 2
+
+        elif cmf < -0.10:
+
+            score -= 2
+
+            reasons.append(
+                f"CMF يشير إلى ضغط بيعي ({cmf:.2f})"
+            )
+
+    # ------------------------------------------------------
+    # MFI
+    # ------------------------------------------------------
+
+    if not np.isnan(mfi):
+
+        if 50 <= mfi <= 70:
+
+            score += 2
+
+        elif mfi > 80:
+
+            score -= 1
+
+        elif mfi < 25:
+
+            score += 1
+
+    # ------------------------------------------------------
+    # A/D Line
+    # ------------------------------------------------------
+
+    if (
+        not np.isnan(ad_slope)
+        and ad_slope > 0
+    ):
+
+        score += 1
+
+        reasons.append(
+            "خط التجميع/التصريف في اتجاه إيجابي"
+        )
+
+    return (
+        clamp(score, 0, 10),
+        reasons
+    )
+
+
+# ==========================================================
+# Volatility Score - 5 Points
+# ==========================================================
+
+def calculate_volatility_score(last):
+
+    score = 0
+    reasons = []
+
+    atr_pct = safe_float(
+        last.get("ATR_Pct")
+    )
+
+    bb_position = safe_float(
+        last.get("BB_POSITION")
+    )
+
+    if not np.isnan(atr_pct):
+
+        if 1.5 <= atr_pct <= 4:
+
+            score += 3
+
+        elif atr_pct < 1.5:
+
+            score += 2
+
+        elif atr_pct <= 6:
+
+            score += 1
+
+        else:
+
+            reasons.append(
+                f"تذبذب مرتفع (ATR {atr_pct:.1f}%)"
+            )
+
+    # ------------------------------------------------------
+    # Bollinger Position
+    # ------------------------------------------------------
+
+    if not np.isnan(bb_position):
+
+        if 30 <= bb_position <= 70:
+
+            score += 2
+
+        elif bb_position < 20:
+
+            score += 1
+
+        elif bb_position > 90:
+
+            reasons.append(
+                "السعر قريب من الحد العلوي لبولينجر"
+            )
+
+    return (
+        clamp(score, 0, 5),
+        reasons
+    )
+
+
+# ==========================================================
+# Price Strength Score - 5 Points
+# ==========================================================
+
+def calculate_price_strength_score(last):
+
+    score = 0
+    reasons = []
+
+    position52 = safe_float(
+        last.get("Position_52W")
+    )
+
+    return20 = safe_float(
+        last.get("Return_20D")
+    )
+
+    return60 = safe_float(
+        last.get("Return_60D")
+    )
+
+    # ------------------------------------------------------
+    # 52 Week Position
+    # ------------------------------------------------------
+
+    if not np.isnan(position52):
+
+        if position52 >= 70:
+
+            score += 2
+
+        elif position52 >= 50:
+
+            score += 1
+
+        elif position52 < 25:
+
+            score += 1
+
+    # ------------------------------------------------------
+    # 20D Return
+    # ------------------------------------------------------
+
+    if not np.isnan(return20):
+
+        if return20 > 5:
+
+            score += 1
+
+        elif return20 > 0:
+
+            score += 0.5
+
+    # ------------------------------------------------------
+    # 60D Return
+    # ------------------------------------------------------
+
+    if not np.isnan(return60):
+
+        if return60 > 10:
+
+            score += 2
+
+        elif return60 > 0:
+
+            score += 1
+
+    return (
+        clamp(score, 0, 5),
+        reasons
+    )
+
+
+# ==========================================================
+# Forecast / Scenario
+# ==========================================================
+
+def calculate_forecast_scores(
+    total_score,
+    momentum_score,
+    trend_score,
+    volume_score,
+):
+
+    # ------------------------------------------------------
+    # 1 Month
+    # ------------------------------------------------------
+
+    score_1m = (
+        total_score * 0.50
+        +
+        trend_score * 1.0
+        +
+        momentum_score * 1.0
+        +
+        volume_score * 0.5
+    )
+
+    # Normalize
+    score_1m = clamp(
+        score_1m / 1.20,
+        0,
+        100
+    )
+
+    # ------------------------------------------------------
+    # 2 Months
+    # ------------------------------------------------------
+
+    score_2m = (
+        total_score * 0.55
+        +
+        trend_score * 1.10
+        +
+        momentum_score * 0.75
+        +
+        volume_score * 0.50
+    )
+
+    score_2m = clamp(
+        score_2m / 1.25,
+        0,
+        100
+    )
+
+    return (
+        round(score_1m),
+        round(score_2m)
+    )
+
+
+def forecast_status(score):
+
+    if score >= 75:
+
+        return "🟢 صاعد قوي"
+
+    if score >= 60:
+
+        return "🟢 صاعد"
+
+    if score >= 45:
+
+        return "🟡 عرضي / محايد"
+
+    if score >= 30:
+
+        return "🟠 ضعيف"
+
+    return "🔴 هابط"
+
+
+# ==========================================================
+# Exit Strategy
+# ==========================================================
+
+def calculate_exit_strategy(
+    rsi,
+    score,
+    macd_hist,
+    price,
+    ema20,
+):
+
+    if np.isnan(rsi):
+
+        return "مراقبة المؤشرات قبل الخروج"
+
+    # IMPORTANT:
+    # Check 80 before 75.
+
+    if rsi >= 80:
+
+        return (
+            "تشبع شرائي مرتفع جدًا؛ "
+            "راقب جني الأرباح أو ظهور إشارة انعكاس."
+        )
+
+    if rsi >= 75:
+
+        return (
+            "السهم في منطقة تشبع شرائي؛ "
+            "راقب ضعف الزخم أو كسر EMA20."
+        )
+
+    if (
+        not np.isnan(macd_hist)
+        and macd_hist < 0
+    ):
+
+        return (
+            "الزخم يضعف؛ "
+            "راقب استمرار انخفاض MACD Histogram."
+        )
+
+    if (
+        not np.isnan(ema20)
+        and price < ema20
+    ):
+
+        return (
+            "السعر تحت EMA20؛ "
+            "راقب كسر الدعم القريب."
+        )
+
+    if score < 45:
+
+        return (
+            "ضعف واضح في المؤشرات؛ "
+            "تجنب زيادة المخاطرة."
+        )
+
+    return (
+        "استمرار المراقبة مع الالتزام "
+        "بمستوى وقف الخسارة."
+    )
+
+
+# ==========================================================
+# Main Strategy
 # ==========================================================
 
 def evaluate_stock_strategy(
     df,
-    ticker_symbol
+    ticker
 ):
 
-    try:
+    if df is None or df.empty:
 
-        # ======================================================
-        # Basic Validation
-        # ======================================================
+        return None
 
-        if df is None or len(df) < 220:
-            return None
+    required = [
 
-        latest = df.iloc[-1]
-        prev = df.iloc[-2]
+        "Close",
+        "EMA_20",
+        "EMA_50",
+        "MA_200",
+        "RSI_14",
+        "ATR_14",
+        "MACD",
+        "MACD_Signal",
+        "ADX_14",
+        "Volume_Ratio",
+    ]
 
-        required_columns = [
-            "Close",
-            "MA_200",
-            "EMA_20",
-            "EMA_50",
-            "RSI_14",
-            "ADX",
-            "MACD",
-            "MACD_signal",
-            "ATR",
-            "Volume",
-            "Vol_SMA20",
-            "Resistance_20",
-            "Support_20",
-        ]
+    missing = [
+        col
+        for col in required
+        if col not in df.columns
+    ]
 
-        for column in required_columns:
+    if missing:
 
-            if column not in df.columns:
-                return None
+        return None
 
-            if (
-                latest[column] != latest[column]
-                or
-                prev[column] != prev[column]
-            ):
-                return None
+    if len(df) < 220:
 
-        # ======================================================
-        # Current Values
-        # ======================================================
+        return None
 
-        close_price = float(
-            latest["Close"]
+    last = df.iloc[-1]
+
+    price = safe_float(
+        last.get("Close")
+    )
+
+    atr = safe_float(
+        last.get("ATR_14")
+    )
+
+    rsi = safe_float(
+        last.get("RSI_14")
+    )
+
+    ema20 = safe_float(
+        last.get("EMA_20")
+    )
+
+    ema50 = safe_float(
+        last.get("EMA_50")
+    )
+
+    ma200 = safe_float(
+        last.get("MA_200")
+    )
+
+    macd_hist = safe_float(
+        last.get("MACD_Hist")
+    )
+
+    adx = safe_float(
+        last.get("ADX_14")
+    )
+
+    volume_ratio = safe_float(
+        last.get("Volume_Ratio")
+    )
+
+    if (
+        np.isnan(price)
+        or price <= 0
+    ):
+
+        return None
+
+    # ======================================================
+    # RSI Hard Filter
+    # ======================================================
+
+    if (
+        not np.isnan(rsi)
+        and rsi > MAX_ALLOWABLE_RSI
+    ):
+
+        return None
+
+    # ======================================================
+    # SCORE COMPONENTS
+    # ======================================================
+
+    trend_score, trend_reasons = (
+        calculate_trend_score(
+            last
         )
+    )
 
-        ma200 = float(
-            latest["MA_200"]
+    momentum_score, momentum_reasons = (
+        calculate_momentum_score(
+            last
         )
+    )
 
-        ema20 = float(
-            latest["EMA_20"]
+    volume_score, volume_reasons = (
+        calculate_volume_score(
+            last
         )
+    )
 
-        ema50 = float(
-            latest["EMA_50"]
+    price_action_score, price_action_reasons = (
+        calculate_price_action_score(
+            last
         )
+    )
 
-        rsi = float(
-            latest["RSI_14"]
+    sr_score, sr_reasons = (
+        calculate_sr_score(
+            last
         )
+    )
 
-        adx = float(
-            latest["ADX"]
+    money_flow_score, money_flow_reasons = (
+        calculate_money_flow_score(
+            last
         )
+    )
 
-        prev_adx = float(
-            prev["ADX"]
+    volatility_score, volatility_reasons = (
+        calculate_volatility_score(
+            last
         )
+    )
 
-        macd = float(
-            latest["MACD"]
+    price_strength_score, price_strength_reasons = (
+        calculate_price_strength_score(
+            last
         )
+    )
 
-        macd_signal = float(
-            latest["MACD_signal"]
-        )
+    # ======================================================
+    # TOTAL SCORE
+    # ======================================================
 
-        prev_macd = float(
-            prev["MACD"]
-        )
+    score = (
 
-        prev_signal = float(
-            prev["MACD_signal"]
-        )
+        trend_score
+        +
+        momentum_score
+        +
+        volume_score
+        +
+        price_action_score
+        +
+        sr_score
+        +
+        money_flow_score
+        +
+        volatility_score
+        +
+        price_strength_score
 
-        atr = float(
-            latest["ATR"]
-        )
+    )
 
-        volume = float(
-            latest["Volume"]
-        )
-
-        vol_sma20 = float(
-            latest["Vol_SMA20"]
-        )
-
-        resistance = float(
-            latest["Resistance_20"]
-        )
-
-        support = float(
-            latest["Support_20"]
-        )
-
-        # ======================================================
-        # Validation
-        # ======================================================
-
-        if any(
-            value <= 0
-            for value in [
-                close_price,
-                ma200,
-                ema20,
-                ema50,
-                atr,
-                resistance,
-                support,
-            ]
-        ):
-            return None
-
-        # ======================================================
-        # RSI Filter
-        # ======================================================
-
-        if rsi > MAX_ALLOWABLE_RSI:
-            return None
-
-        # ======================================================
-        # EMA50 Slope
-        # ======================================================
-
-        ema50_slope = 0
-
-        if len(df) >= 11:
-
-            old_ema50 = float(
-                df["EMA_50"].iloc[-11]
+    score = int(
+        round(
+            clamp(
+                score,
+                0,
+                100
             )
-
-            if old_ema50 > 0:
-
-                ema50_slope = (
-                    (
-                        ema50 -
-                        old_ema50
-                    )
-                    /
-                    old_ema50
-                ) * 100
-
-        # ======================================================
-        # MA200 Slope
-        # ======================================================
-
-        ma200_slope = 0
-
-        if len(df) >= 21:
-
-            old_ma200 = float(
-                df["MA_200"].iloc[-21]
-            )
-
-            if old_ma200 > 0:
-
-                ma200_slope = (
-                    (
-                        ma200 -
-                        old_ma200
-                    )
-                    /
-                    old_ma200
-                ) * 100
-
-        # ======================================================
-        # EMA20 Slope
-        # ======================================================
-
-        ema20_slope = 0
-
-        if len(df) >= 6:
-
-            old_ema20 = float(
-                df["EMA_20"].iloc[-6]
-            )
-
-            if old_ema20 > 0:
-
-                ema20_slope = (
-                    (
-                        ema20 -
-                        old_ema20
-                    )
-                    /
-                    old_ema20
-                ) * 100
-
-        # ======================================================
-        # MACD
-        # ======================================================
-
-        bullish_macd_cross = (
-            prev_macd <= prev_signal
-            and
-            macd > macd_signal
         )
+    )
 
-        macd_positive = (
-            macd > macd_signal
-            and
-            macd > 0
+    # ======================================================
+    # ALL REASONS
+    # ======================================================
+
+    reasons = []
+
+    reasons.extend(
+        trend_reasons
+    )
+
+    reasons.extend(
+        momentum_reasons
+    )
+
+    reasons.extend(
+        volume_reasons
+    )
+
+    reasons.extend(
+        price_action_reasons
+    )
+
+    reasons.extend(
+        sr_reasons
+    )
+
+    reasons.extend(
+        money_flow_reasons
+    )
+
+    reasons.extend(
+        volatility_reasons
+    )
+
+    reasons.extend(
+        price_strength_reasons
+    )
+
+    # Remove duplicates
+    reasons = list(
+        dict.fromkeys(
+            reasons
         )
+    )
 
-        # ======================================================
-        # Volume
-        # ======================================================
+    # ======================================================
+    # FORECAST
+    # ======================================================
 
-        volume_ratio = (
-            volume / vol_sma20
-            if vol_sma20 > 0
-            else 0
-        )
-
-        # ======================================================
-        # Breakout
-        # ======================================================
-
-        breakout = (
-            close_price >
-            resistance
-        )
-
-        # ======================================================
-        # EMA20 Distance
-        # ======================================================
-
-        distance_from_ema = (
-            (
-                close_price -
-                ema20
-            )
-            /
-            ema20
-        ) * 100
-
-        # ======================================================
-        # Candlesticks
-        # ======================================================
-
-        candle_reasons = (
-            analyze_candlesticks(df)
-        )
-
-        # ======================================================
-        # Main Score
-        # ======================================================
-
-        score = 0
-
-        reasons = []
-
-        if close_price > ma200:
-
-            score += 10
-
-            reasons.append(
-                "✅ السعر أعلى من متوسط 200 يوم"
-            )
-
-        if ma200_slope > 0:
-
-            score += 5
-
-            reasons.append(
-                f"📈 MA200 صاعد ({ma200_slope:+.1f}%)"
-            )
-
-        if ema20 > ema50:
-
-            score += 10
-
-            reasons.append(
-                "📈 EMA20 أعلى من EMA50"
-            )
-
-        if ema50_slope > 0:
-
-            score += 5
-
-            reasons.append(
-                f"📈 EMA50 صاعد ({ema50_slope:+.1f}%)"
-            )
-
-        if (
-            adx > 25
-            and
-            adx > prev_adx
-        ):
-
-            score += 10
-
-            reasons.append(
-                f"💪 اتجاه قوي ومتزايد (ADX: {adx:.1f})"
-            )
-
-        elif adx > 20:
-
-            score += 5
-
-            reasons.append(
-                f"📊 قوة اتجاه مقبولة (ADX: {adx:.1f})"
-            )
-
-        if 50 <= rsi <= 65:
-
-            score += 10
-
-            reasons.append(
-                f"🔥 RSI مناسب للزخم ({rsi:.1f})"
-            )
-
-        elif 45 <= rsi < 50:
-
-            score += 5
-
-            reasons.append(
-                f"⚠️ RSI ضعيف نسبيًا ({rsi:.1f})"
-            )
-
-        elif rsi < 40:
-
-            score += 5
-
-            reasons.append(
-                f"⚠️ RSI في مناطق التجميع ({rsi:.1f})"
-            )
-
-        if bullish_macd_cross:
-
-            score += 10
-
-            reasons.append(
-                "🚀 MACD Bullish Cross"
-            )
-
-        elif macd_positive:
-
-            score += 5
-
-            reasons.append(
-                "📈 MACD إيجابي"
-            )
-
-        if volume_ratio >= 1.5:
-
-            score += 10
-
-            reasons.append(
-                f"💥 حجم تداول قوي ({volume_ratio:.1f}x المتوسط)"
-            )
-
-        elif volume_ratio >= 1.0:
-
-            score += 5
-
-            reasons.append(
-                f"📊 حجم تداول جيد ({volume_ratio:.1f}x المتوسط)"
-            )
-
-        if breakout:
-
-            score += 5
-
-            reasons.append(
-                "🎯 السعر اخترق مقاومة الـ20 جلسة"
-            )
-
-        if candle_reasons:
-
-            score += min(
-                len(candle_reasons) * 5,
-                5
-            )
-
-            reasons.extend(
-                candle_reasons
-            )
-
-        score = min(
+    score_1m, score_2m = (
+        calculate_forecast_scores(
             score,
-            100
+            momentum_score,
+            trend_score,
+            volume_score,
         )
+    )
 
-        # ======================================================
-        # 1 Month Setup Score
-        # ======================================================
+    forecast_1m_status = (
+        forecast_status(
+            score_1m
+        )
+    )
 
-        forecast_1m_score = 0
+    forecast_2m_status = (
+        forecast_status(
+            score_2m
+        )
+    )
 
-        if ema20 > ema50:
-            forecast_1m_score += 15
+    # ======================================================
+    # TREND STATUS
+    # ======================================================
 
-        if ema20_slope > 0:
-            forecast_1m_score += 10
-
-        if ema50_slope > 0:
-            forecast_1m_score += 10
-
-        if close_price > ma200:
-            forecast_1m_score += 10
+    if (
+        not np.isnan(ema20)
+        and not np.isnan(ema50)
+        and not np.isnan(ma200)
+    ):
 
         if (
-            adx > 25
-            and
-            adx > prev_adx
-        ):
-            forecast_1m_score += 15
-
-        elif adx > 20:
-            forecast_1m_score += 8
-
-        if 50 <= rsi <= 65:
-            forecast_1m_score += 10
-
-        elif 45 <= rsi < 50:
-            forecast_1m_score += 5
-
-        if bullish_macd_cross:
-            forecast_1m_score += 15
-
-        elif macd_positive:
-            forecast_1m_score += 8
-
-        if volume_ratio >= 1.5:
-            forecast_1m_score += 10
-
-        elif volume_ratio >= 1.0:
-            forecast_1m_score += 5
-
-        forecast_1m_score = min(
-            forecast_1m_score,
-            100
-        )
-
-        # ======================================================
-        # 2 Month Setup Score
-        # ======================================================
-
-        forecast_2m_score = 0
-
-        if close_price > ma200:
-            forecast_2m_score += 15
-
-        if ma200_slope > 0:
-            forecast_2m_score += 15
-
-        if ema20 > ema50:
-            forecast_2m_score += 10
-
-        if ema50_slope > 0:
-            forecast_2m_score += 15
-
-        if (
-            adx > 25
-            and
-            adx > prev_adx
-        ):
-            forecast_2m_score += 15
-
-        elif adx > 20:
-            forecast_2m_score += 8
-
-        if 50 <= rsi <= 65:
-            forecast_2m_score += 10
-
-        elif 45 <= rsi < 50:
-            forecast_2m_score += 5
-
-        if macd_positive:
-            forecast_2m_score += 10
-
-        elif bullish_macd_cross:
-            forecast_2m_score += 8
-
-        if volume_ratio >= 1.5:
-            forecast_2m_score += 10
-
-        elif volume_ratio >= 1.0:
-            forecast_2m_score += 5
-
-        forecast_2m_score = min(
-            forecast_2m_score,
-            100
-        )
-
-        # ======================================================
-        # Status
-        # ======================================================
-
-        if forecast_1m_score >= 85:
-
-            forecast_1m_status = (
-                "🔥 ترشيح قوي للشهر القادم"
-            )
-
-        elif forecast_1m_score >= 70:
-
-            forecast_1m_status = (
-                "🟢 ترشيح جيد للشهر القادم"
-            )
-
-        elif forecast_1m_score >= 55:
-
-            forecast_1m_status = (
-                "🟡 مراقبة للشهر القادم"
-            )
-
-        else:
-
-            forecast_1m_status = (
-                "🔴 ترشيح ضعيف للشهر القادم"
-            )
-
-        if forecast_2m_score >= 85:
-
-            forecast_2m_status = (
-                "🔥 ترشيح قوي للشهرين القادمين"
-            )
-
-        elif forecast_2m_score >= 70:
-
-            forecast_2m_status = (
-                "🟢 ترشيح جيد للشهرين القادمين"
-            )
-
-        elif forecast_2m_score >= 55:
-
-            forecast_2m_status = (
-                "🟡 مراقبة للشهرين القادمين"
-            )
-
-        else:
-
-            forecast_2m_status = (
-                "🔴 ترشيح ضعيف للشهرين القادمين"
-            )
-
-        if (
-            forecast_1m_score >= 65
-            and
-            forecast_2m_score >= 65
+            price > ema20
+            and ema20 > ema50
+            and ema50 > ma200
         ):
 
             trend_status = (
-                "🟢 اتجاه حالي داعم للشهر والشهرين القادمين"
+                "📈 صاعد قوي"
             )
 
-        elif forecast_1m_score >= 65:
+        elif (
+            price > ema50
+            and ema50 > ma200
+        ):
 
             trend_status = (
-                "🟢 Setup أقوى للشهر القادم"
+                "📈 صاعد"
             )
 
-        elif forecast_2m_score >= 65:
+        elif (
+            price < ema20
+            and ema20 < ema50
+            and ema50 < ma200
+        ):
 
             trend_status = (
-                "🟢 Setup أقوى للشهرين القادمين"
+                "📉 هابط قوي"
+            )
+
+        elif price < ma200:
+
+            trend_status = (
+                "📉 تحت MA200"
             )
 
         else:
 
             trend_status = (
-                "🟡 Setup متوسط ويحتاج متابعة"
+                "↔️ عرضي / انتقالي"
             )
 
-        # ======================================================
-        # Entry Analysis
-        # ======================================================
+    else:
 
-        max_allowed_drop = (
-            close_price * 0.985
+        trend_status = (
+            "غير محدد"
         )
+
+    # ======================================================
+    # DISTANCE FROM EMA20
+    # ======================================================
+
+    distance_from_ema20 = safe_float(
+        last.get(
+            "EMA20_Distance_Pct"
+        )
+    )
+
+    overextended = (
+        not np.isnan(
+            distance_from_ema20
+        )
+        and
+        distance_from_ema20
+        > MAX_DISTANCE_FROM_EMA20
+    )
+
+    too_far_below_ema = (
+        not np.isnan(
+            distance_from_ema20
+        )
+        and
+        distance_from_ema20
+        < -10
+    )
+
+    # ======================================================
+    # SUPPORT / RESISTANCE
+    # ======================================================
+
+    support = safe_float(
+        last.get(
+            "Support_20"
+        )
+    )
+
+    resistance = safe_float(
+        last.get(
+            "Resistance_20"
+        )
+    )
+
+    # ======================================================
+    # ENTRY
+    # ======================================================
+
+    max_allowed_drop = (
+        price * 0.985
+    )
+
+    if (
+        not np.isnan(support)
+        and support > 0
+        and support < price
+    ):
 
         realistic_support = max(
             support,
             max_allowed_drop
         )
 
-        ideal_entry = round(
-            realistic_support,
-            2
+    else:
+
+        realistic_support = (
+            max_allowed_drop
         )
 
-        entry_high = round(
-            close_price,
-            2
-        )
+    ideal_entry = (
+        realistic_support
+    )
 
-        # استخدام إعداد config بدل 25%
-        overextended = (
-            distance_from_ema >
-            MAX_DISTANCE_FROM_EMA20
-        )
+    entry_high = price
 
-        too_far_below_ema = (
-            distance_from_ema < -10
-        )
+    # ======================================================
+    # RISK MANAGEMENT
+    # ======================================================
 
-        if overextended:
-
-            entry_status = (
-                "🟡 WAIT - السعر ممتد فوق EMA20"
-            )
-
-        elif too_far_below_ema:
-
-            entry_status = (
-                "🟡 WAIT - السعر بعيد عن المتوسطات"
-            )
-
-        else:
-
-            entry_status = (
-                "🟢 BUY - سعر الدخول قريب ومرتبط بالزخم الحالي"
-            )
-
-        # ======================================================
-        # Risk Management
-        # ======================================================
-
-        risk = calculate_risk_management(
-            close_price,
+    risk_data = (
+        calculate_risk_management(
+            price,
             atr,
-            support
+            support=support
+        )
+        if not np.isnan(atr)
+        else {}
+    )
+
+    stop_loss = safe_float(
+        risk_data.get(
+            "stop_loss"
+        )
+    )
+
+    if np.isnan(stop_loss):
+
+        stop_loss = (
+            price
+            - 2 * atr
+            if not np.isnan(atr)
+            else price * 0.95
         )
 
-        if risk is None:
-            return None
-
-        stop_loss = float(
-            risk["stop_loss"]
-        )
-
-        if stop_loss >= close_price:
-            return None
-
-        # ======================================================
-        # Expected Time
-        # ======================================================
-
-        distance_tp1 = (
-            risk["tp1"] -
-            close_price
-        )
-
-        distance_tp2 = (
-            risk["tp2"] -
-            close_price
-        )
-
-        daily_speed = (
-            atr
-            if atr > 0
-            else close_price * 0.02
-        )
-
-        effective_speed = (
-            daily_speed * 1.2
-            if adx > 25
-            else daily_speed
-        )
-
-        sessions_tp1 = max(
-            1,
-            round(
-                distance_tp1 /
-                effective_speed
-            )
-        )
-
-        sessions_tp2 = max(
-            1,
-            round(
-                distance_tp2 /
-                effective_speed
-            )
-        )
-
-        if sessions_tp1 >= 5:
-
-            days_tp1_text = (
-                f"تقريباً {sessions_tp1} جلسات "
-                f"({max(1, sessions_tp1 // 5)} أسبوع)"
-            )
-
-        else:
-
-            days_tp1_text = (
-                f"تقريباً {sessions_tp1} جلسات تداول"
-            )
-
-        if sessions_tp2 >= 5:
-
-            days_tp2_text = (
-                f"تقريباً {sessions_tp2} جلسات "
-                f"({max(1, sessions_tp2 // 5)} أسابيع)"
-            )
-
-        else:
-
-            days_tp2_text = (
-                f"تقريباً {sessions_tp2} جلسات تداول"
-            )
-
-        # ======================================================
-        # Exit Strategy
-        # ======================================================
-
-        exit_signals = []
-
-        # مهم: 80 قبل 75
-        if rsi >= 80:
-
-            exit_signals.append(
-                "🚨 تشبع شرائي شديد (>80) - راقب جني الأرباح"
-            )
-
-        elif rsi >= 75:
-
-            exit_signals.append(
-                "⚠️ RSI ممتد (>75) - راقب جني أرباح جزئي"
-            )
-
-        if close_price < ema20:
-
-            exit_signals.append(
-                "🔴 السعر كسر EMA20 هبوطاً - إشارة حماية"
-            )
-
-        if close_price >= resistance * 0.98:
-
-            exit_signals.append(
-                "🎯 السعر يقترب من المقاومة الرئيسية"
-            )
-
-        if not exit_signals:
-
-            exit_strategy_text = (
-                "🟢 الوضع مستقر - متابعة الأهداف TP1 / TP2"
-            )
-
-        else:
-
-            exit_strategy_text = (
-                " | ".join(exit_signals)
-            )
-
-        # ======================================================
-        # Recommendation
-        # ======================================================
-
-        if score < MIN_SCORE_THRESHOLD:
-
-            return None
-
-        elif (
-            score >= 80
-            and
-            forecast_1m_score >= 70
-        ):
-
-            recommendation = (
-                "🔥 شراء قوي جداً"
-            )
-
-        elif score >= 70:
-
-            recommendation = (
-                "🟢 فرصة شراء قوية"
-            )
-
-        elif score >= 60:
-
-            recommendation = (
-                "🟡 فرصة شراء جيدة"
-            )
-
-        else:
-
-            recommendation = (
-                "🟡 WATCH"
-            )
-
-        # ======================================================
-        # Return
-        # ======================================================
-
-        return {
-
-            "ticker":
-                ticker_symbol.replace(
-                    ".CA",
-                    ""
-                ),
-
-            # السعر التاريخي المستخدم في الاستراتيجية
-            "price":
-                round(
-                    close_price,
-                    2
-                ),
-
-            "score":
-                score,
-
-            "rec":
-                recommendation,
-
-            "trend_status":
-                trend_status,
-
-            "forecast_1m_score":
-                forecast_1m_score,
-
-            "forecast_2m_score":
-                forecast_2m_score,
-
-            "forecast_1m_status":
-                forecast_1m_status,
-
-            "forecast_2m_status":
-                forecast_2m_status,
-
-            "entry_status":
-                entry_status,
-
-            "distance_from_ema":
-                round(
-                    distance_from_ema,
-                    2
-                ),
-
-            "ideal_entry":
-                ideal_entry,
-
-            "entry_high":
-                entry_high,
-
-            "ma200_slope":
-                round(
-                    ma200_slope,
-                    2
-                ),
-
-            "ema50_slope":
-                round(
-                    ema50_slope,
-                    2
-                ),
-
-            "atr":
-                round(
-                    atr,
-                    2
-                ),
-
-            "support":
-                round(
-                    support,
-                    2
-                ),
-
-            "resistance":
-                round(
-                    resistance,
-                    2
-                ),
-
-            "volume_ratio":
-                round(
-                    volume_ratio,
-                    2
-                ),
-
-            "stop_loss":
-                risk["stop_loss"],
-
-            "stop_loss_pct":
-                risk.get(
-                    "stop_loss_pct",
-                    0
-                ),
-
-            "shares":
-                risk["shares"],
-
-            "position_value":
-                risk["position_value"],
-
-            "actual_risk":
-                risk["actual_risk"],
-
-            "risk_per_share":
-                risk["risk_per_share"],
-
-            "tp1":
-                risk["tp1"],
-
-            "days_tp1_text":
-                days_tp1_text,
-
-            "tp2":
-                risk["tp2"],
-
-            "days_tp2_text":
-                days_tp2_text,
-
-            "rr1":
-                risk["rr1"],
-
-            "rr2":
-                risk["rr2"],
-
-            "reasons":
-                reasons,
-
-            "exit_strategy":
-                exit_strategy_text,
-        }
-
-    except (
-        TypeError,
-        ValueError,
-        KeyError,
-        IndexError,
-        ZeroDivisionError
+    # ======================================================
+    # TARGETS
+    # ======================================================
+
+    risk_per_share = (
+        price
+        - stop_loss
+    )
+
+    if (
+        np.isnan(risk_per_share)
+        or risk_per_share <= 0
     ):
 
-        return None
+        risk_per_share = (
+            price * 0.05
+        )
+
+    tp1 = (
+        price
+        + risk_per_share * 2
+    )
+
+    tp2 = (
+        price
+        + risk_per_share * 3
+    )
+
+    # Use risk.py values if available
+    if risk_data:
+
+        tp1 = safe_float(
+            risk_data.get(
+                "tp1"
+            ),
+            tp1
+        )
+
+        tp2 = safe_float(
+            risk_data.get(
+                "tp2"
+            ),
+            tp2
+        )
+
+    # ======================================================
+    # RISK / REWARD
+    # ======================================================
+
+    rr1 = (
+        (
+            tp1 - price
+        )
+        /
+        risk_per_share
+    )
+
+    rr2 = (
+        (
+            tp2 - price
+        )
+        /
+        risk_per_share
+    )
+
+    stop_loss_pct = (
+        (
+            stop_loss
+            - price
+        )
+        /
+        price
+    ) * 100
+
+    # ======================================================
+    # TP TIME ESTIMATE
+    # ======================================================
+
+    if (
+        not np.isnan(atr)
+        and atr > 0
+    ):
+
+        atr_pct = (
+            atr
+            / price
+        )
+
+        days_tp1 = max(
+            2,
+            int(
+                round(
+                    (
+                        tp1 - price
+                    )
+                    /
+                    atr
+                )
+            )
+        )
+
+        days_tp2 = max(
+            3,
+            int(
+                round(
+                    (
+                        tp2 - price
+                    )
+                    /
+                    atr
+                )
+            )
+        )
+
+        if atr_pct > 0.05:
+
+            days_tp1 = max(
+                1,
+                days_tp1 - 1
+            )
+
+            days_tp2 = max(
+                2,
+                days_tp2 - 2
+            )
+
+    else:
+
+        days_tp1 = 10
+        days_tp2 = 20
+
+    days_tp1_text = (
+        f"{days_tp1} جلسة تقريبًا"
+    )
+
+    days_tp2_text = (
+        f"{days_tp2} جلسة تقريبًا"
+    )
+
+    # ======================================================
+    # RECOMMENDATION
+    # ======================================================
+
+    if score >= 80:
+
+        rec = (
+            "🔥 شراء قوي جدًا"
+        )
+
+    elif score >= 70:
+
+        rec = (
+            "🟢 فرصة شراء قوية"
+        )
+
+    elif score >= 60:
+
+        rec = (
+            "🟡 فرصة شراء جيدة"
+        )
+
+    elif score >= 50:
+
+        rec = (
+            "🟠 مراقبة"
+        )
+
+    else:
+
+        rec = (
+            "🔴 ضعيف"
+        )
+
+    # ======================================================
+    # EXIT STRATEGY
+    # ======================================================
+
+    exit_strategy = (
+        calculate_exit_strategy(
+            rsi,
+            score,
+            macd_hist,
+            price,
+            ema20,
+        )
+    )
+
+    # ======================================================
+    # CANDLE REASONS
+    # ======================================================
+
+    candle_reasons = (
+        analyze_candlesticks(
+            df
+        )
+    )
+
+    for reason in candle_reasons:
+
+        if reason not in reasons:
+
+            reasons.append(
+                reason
+            )
+
+    # ======================================================
+    # RETURN
+    # ======================================================
+
+    return {
+
+        "ticker":
+            ticker,
+
+        # --------------------------------------------------
+        # Main score
+        # --------------------------------------------------
+
+        "score":
+            score,
+
+        "rec":
+            rec,
+
+        # --------------------------------------------------
+        # Score breakdown
+        # --------------------------------------------------
+
+        "score_breakdown": {
+
+            "trend":
+                trend_score,
+
+            "momentum":
+                momentum_score,
+
+            "volume":
+                volume_score,
+
+            "price_action":
+                price_action_score,
+
+            "support_resistance":
+                sr_score,
+
+            "money_flow":
+                money_flow_score,
+
+            "volatility":
+                volatility_score,
+
+            "price_strength":
+                price_strength_score,
+        },
+
+        "trend_score":
+            trend_score,
+
+        "momentum_score":
+            momentum_score,
+
+        "volume_score":
+            volume_score,
+
+        "price_action_score":
+            price_action_score,
+
+        "sr_score":
+            sr_score,
+
+        "money_flow_score":
+            money_flow_score,
+
+        "volatility_score":
+            volatility_score,
+
+        "price_strength_score":
+            price_strength_score,
+
+        # --------------------------------------------------
+        # Price
+        # --------------------------------------------------
+
+        "price":
+            price,
+
+        "strategy_price":
+            price,
+
+        # --------------------------------------------------
+        # Trend
+        # --------------------------------------------------
+
+        "trend_status":
+            trend_status,
+
+        # --------------------------------------------------
+        # Forecast
+        # --------------------------------------------------
+
+        "forecast_1m_score":
+            score_1m,
+
+        "forecast_2m_score":
+            score_2m,
+
+        "forecast_1m_status":
+            forecast_1m_status,
+
+        "forecast_2m_status":
+            forecast_2m_status,
+
+        # Backward compatibility
+        "score_1m":
+            score_1m,
+
+        "score_2m":
+            score_2m,
+
+        # --------------------------------------------------
+        # Technical
+        # --------------------------------------------------
+
+        "rsi":
+            rsi,
+
+        "adx":
+            adx,
+
+        "atr":
+            atr,
+
+        "volume_ratio":
+            volume_ratio,
+
+        "ema20":
+            ema20,
+
+        "ema50":
+            ema50,
+
+        "ma200":
+            ma200,
+
+        "ema20_distance_pct":
+            distance_from_ema20,
+
+        "support":
+            support,
+
+        "resistance":
+            resistance,
+
+        # --------------------------------------------------
+        # Entry
+        # --------------------------------------------------
+
+        "ideal_entry":
+            round(
+                ideal_entry,
+                2
+            ),
+
+        "entry_high":
+            round(
+                entry_high,
+                2
+            ),
+
+        # --------------------------------------------------
+        # Risk
+        # --------------------------------------------------
+
+        "stop_loss":
+            round(
+                stop_loss,
+                2
+            ),
+
+        "stop_loss_pct":
+            round(
+                stop_loss_pct,
+                2
+            ),
+
+        "risk_per_share":
+            round(
+                risk_per_share,
+                2
+            ),
+
+        "shares":
+            risk_data.get(
+                "shares",
+                0
+            ),
+
+        "position_value":
+            risk_data.get(
+                "position_value",
+                0
+            ),
+
+        "actual_risk":
+            risk_data.get(
+                "actual_risk",
+                0
+            ),
+
+        # --------------------------------------------------
+        # Targets
+        # --------------------------------------------------
+
+        "tp1":
+            round(
+                tp1,
+                2
+            ),
+
+        "tp2":
+            round(
+                tp2,
+                2
+            ),
+
+        "rr1":
+            round(
+                rr1,
+                2
+            ),
+
+        "rr2":
+            round(
+                rr2,
+                2
+            ),
+
+        "days_tp1":
+            days_tp1,
+
+        "days_tp2":
+            days_tp2,
+
+        "days_tp1_text":
+            days_tp1_text,
+
+        "days_tp2_text":
+            days_tp2_text,
+
+        # --------------------------------------------------
+        # Flags
+        # --------------------------------------------------
+
+        "overextended":
+            overextended,
+
+        "too_far_below_ema":
+            too_far_below_ema,
+
+        # --------------------------------------------------
+        # Reasons
+        # --------------------------------------------------
+
+        "reasons":
+            reasons,
+
+        # --------------------------------------------------
+        # Exit
+        # --------------------------------------------------
+
+        "exit_strategy":
+            exit_strategy,
+
+        # --------------------------------------------------
+        # Data
+        # --------------------------------------------------
+
+        "historical_close":
+            df.attrs.get(
+                "historical_close"
+            ),
+
+        "current_price":
+            df.attrs.get(
+                "current_price"
+            ),
+
+        "price_source":
+            df.attrs.get(
+                "price_source"
+            ),
+
+        "is_realtime":
+            df.attrs.get(
+                "is_realtime",
+                False
+            ),
+
+        "current_vs_close_pct":
+            df.attrs.get(
+                "current_vs_close_pct"
+            ),
+
+        "data_source":
+            df.attrs.get(
+                "data_source"
+            ),
+            }
