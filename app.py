@@ -1,7 +1,7 @@
 # ============================================================
 # legend-Mo LENS
 # EGX Technical Intelligence Dashboard
-# Main Screen Search & Layout Edition
+# Main Screen Search & Neon Blue Buttons Edition
 # ============================================================
 
 import streamlit as st
@@ -36,7 +36,7 @@ st.set_page_config(
 
 
 # ============================================================
-# PREMIUM BLACK CSS (MAIN SCREEN LAYOUT)
+# PREMIUM BLACK CSS (NEON BLUE ACTIVE BUTTONS)
 # ============================================================
 
 st.markdown(
@@ -213,6 +213,15 @@ h1, h2, h3, h4 {
     border-radius: 10px !important;
     font-family: 'Cairo', sans-serif !important;
     width: 100%;
+    transition: all 0.2s ease;
+}
+
+/* Neon Blue Glow Style for Active Buttons */
+.tool-btn-active > button {
+    background: linear-gradient(145deg, #0C1E36 0%, #08101E 100%) !important;
+    border: 1px solid #55A7FF !important;
+    color: #55A7FF !important;
+    box-shadow: 0 0 15px rgba(85, 167, 255, 0.4), inset 0 1px 0 rgba(255,255,255,0.1) !important;
 }
 
 div[data-baseweb="select"] > div {
@@ -733,24 +742,68 @@ with control_col3:
 
 st.markdown("---")
 
-# Chart Tools Toggles in an Expander for Clean UI
+
+# ============================================================
+# CHART TOOLS STATE & NEON BLUE INTERACTIVE BUTTONS
+# ============================================================
+
+if "tools" not in st.session_state:
+    st.session_state.tools = {
+        "sr": True,
+        "swing": False,
+        "rolling": False,
+        "previous": False,
+        "fib": False,
+        "pivot": False,
+        "atr": False,
+        "ema": True,
+        "bollinger": False,
+        "volume": True,
+        "rsi": False,
+    }
+
 with st.expander("🛠️ إعدادات وأدوات الشارت المتقدمة", expanded=False):
-    tool_col1, tool_col2, tool_col3, tool_col4 = st.columns(4)
-    with tool_col1:
-        show_sr = st.toggle("الدعم والمقاومة", value=True)
-        show_swing = st.toggle("قمم وقيعان Swing", value=False)
-        show_rolling = st.toggle("قمة / قاع 20 و 50 جلسة", value=False)
-    with tool_col2:
-        show_previous = st.toggle("مستويات الجلسة السابقة", value=False)
-        show_fib = st.toggle("فيبوناتشي", value=False)
-        show_pivot = st.toggle("نقاط الارتكاز Pivot", value=False)
-    with tool_col3:
-        show_atr = st.toggle("مستويات ATR", value=False)
-        show_ema = st.toggle("EMA 20 / 50 + MA 200", value=True)
-        show_bollinger = st.toggle("Bollinger Bands", value=False)
-    with tool_col4:
-        show_volume = st.toggle("حجم التداول", value=True)
-        show_rsi = st.toggle("RSI", value=False)
+    t_col1, t_col2, t_col3, t_col4 = st.columns(4)
+    
+    tools_map = [
+        (t_col1, "sr", "الدعم والمقاومة"),
+        (t_col1, "swing", "قمم وقيعان Swing"),
+        (t_col1, "rolling", "قمة / قاع 20 و 50 جلسة"),
+        (t_col2, "previous", "مستويات الجلسة السابقة"),
+        (t_col2, "fib", "فيبوناتشي"),
+        (t_col2, "pivot", "نقاط الارتكاز Pivot"),
+        (t_col3, "atr", "مستويات ATR"),
+        (t_col3, "ema", "EMA 20 / 50 + MA 200"),
+        (t_col3, "bollinger", "Bollinger Bands"),
+        (t_col4, "volume", "حجم التداول"),
+        (t_col4, "rsi", "RSI"),
+    ]
+
+    for col, key, label in tools_map:
+        with col:
+            is_active = st.session_state.tools[key]
+            btn_label = f"🔵 {label}" if is_active else f"⚪ {label}"
+            
+            # Apply active class wrapper for neon blue glow effect
+            css_class = "tool-btn-active" if is_active else ""
+            st.markdown(f'<div class="{css_class}">', unsafe_allow_html=True)
+            if st.button(btn_label, key=f"btn_{key}", use_container_width=True):
+                st.session_state.tools[key] = not is_active
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+# Assign variables for chart builder
+show_sr = st.session_state.tools["sr"]
+show_swing = st.session_state.tools["swing"]
+show_rolling = st.session_state.tools["rolling"]
+show_previous = st.session_state.tools["previous"]
+show_fib = st.session_state.tools["fib"]
+show_pivot = st.session_state.tools["pivot"]
+show_atr = st.session_state.tools["atr"]
+show_ema = st.session_state.tools["ema"]
+show_bollinger = st.session_state.tools["bollinger"]
+show_volume = st.session_state.tools["volume"]
+show_rsi = st.session_state.tools["rsi"]
 
 
 # ============================================================
