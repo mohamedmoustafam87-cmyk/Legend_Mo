@@ -1,7 +1,7 @@
 # ============================================================
 # legend-Mo LENS
 # EGX Technical Intelligence Dashboard
-# Main Screen Search & Neon Blue Buttons Edition
+# Main Search & Full Neon Blue Button Grid Edition
 # ============================================================
 
 import streamlit as st
@@ -36,7 +36,7 @@ st.set_page_config(
 
 
 # ============================================================
-# PREMIUM BLACK CSS (NEON BLUE ACTIVE BUTTONS)
+# PREMIUM BLACK CSS & FULL NEON BLUE BUTTON STYLING
 # ============================================================
 
 st.markdown(
@@ -206,22 +206,15 @@ h1, h2, h3, h4 {
     line-height: 1.8;
 }
 
+/* Base button styling */
 .stButton > button {
     background: #0D1013 !important;
-    color: #DDE1E6 !important;
+    color: #8A929D !important;
     border: 1px solid #242A31 !important;
     border-radius: 10px !important;
     font-family: 'Cairo', sans-serif !important;
     width: 100%;
     transition: all 0.2s ease;
-}
-
-/* Neon Blue Glow Style for Active Buttons */
-.tool-btn-active > button {
-    background: linear-gradient(145deg, #0C1E36 0%, #08101E 100%) !important;
-    border: 1px solid #55A7FF !important;
-    color: #55A7FF !important;
-    box-shadow: 0 0 15px rgba(85, 167, 255, 0.4), inset 0 1px 0 rgba(255,255,255,0.1) !important;
 }
 
 div[data-baseweb="select"] > div {
@@ -719,7 +712,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Search & Controls Toolbar on Main Screen
 control_col1, control_col2, control_col3 = st.columns([2, 2, 1])
 
 with control_col1:
@@ -744,7 +736,7 @@ st.markdown("---")
 
 
 # ============================================================
-# CHART TOOLS STATE & NEON BLUE INTERACTIVE BUTTONS
+# CHART TOOLS STATE & FULL NEON BLUE BUTTONS
 # ============================================================
 
 if "tools" not in st.session_state:
@@ -763,34 +755,43 @@ if "tools" not in st.session_state:
     }
 
 with st.expander("🛠️ إعدادات وأدوات الشارت المتقدمة", expanded=False):
-    t_col1, t_col2, t_col3, t_col4 = st.columns(4)
+    t1, t2, t3, t4 = st.columns(4)
     
     tools_map = [
-        (t_col1, "sr", "الدعم والمقاومة"),
-        (t_col1, "swing", "قمم وقيعان Swing"),
-        (t_col1, "rolling", "قمة / قاع 20 و 50 جلسة"),
-        (t_col2, "previous", "مستويات الجلسة السابقة"),
-        (t_col2, "fib", "فيبوناتشي"),
-        (t_col2, "pivot", "نقاط الارتكاز Pivot"),
-        (t_col3, "atr", "مستويات ATR"),
-        (t_col3, "ema", "EMA 20 / 50 + MA 200"),
-        (t_col3, "bollinger", "Bollinger Bands"),
-        (t_col4, "volume", "حجم التداول"),
-        (t_col4, "rsi", "RSI"),
+        (t1, "sr", "الدعم والمقاومة"),
+        (t1, "swing", "قمم وقيعان Swing"),
+        (t1, "rolling", "قمة / قاع 20 و 50 جلسة"),
+        (t2, "previous", "مستويات الجلسة السابقة"),
+        (t2, "fib", "فيبوناتشي"),
+        (t2, "pivot", "نقاط الارتكاز Pivot"),
+        (t3, "atr", "مستويات ATR"),
+        (t3, "ema", "EMA 20 / 50 + MA 200"),
+        (t3, "bollinger", "Bollinger Bands"),
+        (t4, "volume", "حجم التداول"),
+        (t4, "rsi", "RSI"),
     ]
 
     for col, key, label in tools_map:
         with col:
             is_active = st.session_state.tools[key]
-            btn_label = f"🔵 {label}" if is_active else f"⚪ {label}"
             
-            # Apply active class wrapper for neon blue glow effect
-            css_class = "tool-btn-active" if is_active else ""
-            st.markdown(f'<div class="{css_class}">', unsafe_allow_html=True)
-            if st.button(btn_label, key=f"btn_{key}", use_container_width=True):
+            # Dynamic styling for active vs inactive buttons
+            if is_active:
+                st.markdown("""
+                <style>
+                div[data-testid="stColumn"] button[kind="secondary"] {
+                    background: linear-gradient(145deg, #102B4E 0%, #081628 100%) !important;
+                    border: 1.5px solid #55A7FF !important;
+                    color: #55A7FF !important;
+                    box-shadow: 0 0 15px rgba(85, 167, 255, 0.4), inset 0 1px 0 rgba(255,255,255,0.15) !important;
+                    font-weight: 700 !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+            
+            if st.button(label, key=f"btn_{key}", use_container_width=True):
                 st.session_state.tools[key] = not is_active
                 st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
 
 # Assign variables for chart builder
 show_sr = st.session_state.tools["sr"]
