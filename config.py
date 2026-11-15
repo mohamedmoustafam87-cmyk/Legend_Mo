@@ -1,4 +1,5 @@
 import os
+import re
 from zoneinfo import ZoneInfo
 
 _BASE = os.path.dirname(os.path.abspath(__file__))
@@ -7,8 +8,11 @@ _BASE = os.path.dirname(os.path.abspath(__file__))
 # Telegram (لا يتم رفع خطأ وقت الاستيراد - يتحقق منه البوت فقط)
 # ==========================================================
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
+# تحذير: القيم هنا مكتوبة داخل الكود بطلب صاحب المشروع.
+# لو الريبو Public أي حد يقدر يشوف التوكن ويتحكم في البوت.
+# الأفضل: ريبو Private، أو رجّع القراءة من GitHub Secrets (os.getenv).
+TELEGRAM_TOKEN = "8636770275:AAEvrJ289sEUW1Yr2f2qBcB1Tsd2z1dcsc"
+ADMIN_CHAT_ID = "88742271"
 
 
 def require_telegram():
@@ -16,6 +20,17 @@ def require_telegram():
         raise ValueError("TELEGRAM_TOKEN is not set")
     if not ADMIN_CHAT_ID:
         raise ValueError("ADMIN_CHAT_ID is not set")
+
+    # فحص شكل التوكن (بدون طباعته): الجزء بعد ":" عادةً 35 حرف
+    if not re.fullmatch(r"\d{8,10}:[A-Za-z0-9_-]{35}", str(TELEGRAM_TOKEN)):
+        secret_len = len(str(TELEGRAM_TOKEN).split(":")[-1])
+        print(
+            f"⚠️ شكل TELEGRAM_TOKEN غير معتاد (طول الجزء بعد ':' = {secret_len}، المعتاد 35). "
+            "لو تيليجرام رد بـ Unauthorized أعد نسخ التوكن كاملاً من BotFather."
+        )
+
+    if not str(ADMIN_CHAT_ID).lstrip("-").isdigit():
+        print("⚠️ ADMIN_CHAT_ID لازم يكون رقم (للجروب بيبدأ بـ -).")
 
 
 # ==========================================================
