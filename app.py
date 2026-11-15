@@ -15,15 +15,35 @@ from plotly.subplots import make_subplots
 # PROJECT IMPORTS
 # ============================================================
 
-from scanner import (
-    fetch_mubasher_prices,
-    get_stock_data,
-    load_saved_context,
-)
+import os
+import traceback
 
-from indicators import calculate_indicators
-from strategy import evaluate_stock_strategy
-from signals import attach_context, REGIME_LABELS
+# فحص تشخيصي: لو ملف ناقص أو قديم بيظهر السبب بالظبط على الصفحة بدل رسالة Streamlit المخفية
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REQUIRED_FILES = [
+    "config.py", "indicators.py", "signals.py", "ml.py", "risk.py",
+    "strategy.py", "scanner.py", "report.py", "portfolio.py", "main.py",
+]
+_missing_files = [f for f in _REQUIRED_FILES if not os.path.exists(os.path.join(_HERE, f))]
+
+if _missing_files:
+    st.error("ملفات ناقصة في فولدر المشروع على GitHub: " + " ، ".join(_missing_files))
+    st.stop()
+
+try:
+    from scanner import (
+        fetch_mubasher_prices,
+        get_stock_data,
+        load_saved_context,
+    )
+
+    from indicators import calculate_indicators
+    from strategy import evaluate_stock_strategy
+    from signals import attach_context, REGIME_LABELS
+except Exception:
+    st.error("فشل استيراد ملفات المشروع (غالباً ملف قديم لم يتم استبداله). ابعت النص التالي:")
+    st.code(traceback.format_exc())
+    st.stop()
 
 
 # ============================================================
