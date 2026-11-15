@@ -1,7 +1,10 @@
 import os
+import sys
+import traceback
 from datetime import datetime
 
 from config import (
+    ADMIN_CHAT_ID,
     TIMEZONE,
     REPORT_TIMES,
     REPORT_TIME_TOLERANCE_MINUTES,
@@ -10,7 +13,7 @@ from config import (
     require_telegram,
 )
 from scanner import scan_market
-from report import send_scanner_report, send_portfolio_report
+from report import send_scanner_report, send_portfolio_report, safe_send_message
 from portfolio import analyze_user_portfolio
 
 
@@ -52,29 +55,45 @@ def main():
         print("🔵 Manual trigger detected.")
 
     elif not is_trading_day():
-        print("⏭️ اليوم ليس يوم تداول (جمعة/سبت/إجازة) - تخطي.")
+        print(f"⏭️ اليوم ليس يوم تداول (جمعة/سبت/إجازة) - تخطي. الوقت الآن بتوقيت القاهرة: {datetime.now(TIMEZONE):%Y-%m-%d %H:%M %A}")
         return
 
     elif not is_scheduled_report_time():
-        print("⏭️ خارج مواعيد الإرسال المحددة - تخطي.")
+        print(f"⏭️ خارج مواعيد الإرسال المحددة - تخطي. الوقت الآن بتوقيت القاهرة: {datetime.now(TIMEZONE):%H:%M} (المواعيد: {REPORT_TIMES} ± {REPORT_TIME_TOLERANCE_MINUTES} دقايق)")
         return
 
     try:
         require_telegram()
 
+        # عند التشغيل اليدوي: رسالة فورية تثبت إن التوكن والـ ID شغالين قبل السكان الطويل
+        if is_manual_trigger():
+            if not safe_send_message(
+                ADMIN_CHAT_ID,
+                "🤖 *EGX Bot:* تم التشغيل اليدوي — جاري السكان، والتقرير يوصل خلال دقايق.",
+            ):
+                print("❌ تيليجرام رفض رسالة الاختبار: راجع TELEGRAM_TOKEN و ADMIN_CHAT_ID في config.py "
+                      "(Unauthorized = توكن غلط | chat not found = ID غلط أو لم تضغط Start).")
+                sys.exit(1)
+
         print("🔎 Starting EGX market scan...")
         opportunities, ctx = scan_market(return_context=True)
 
         print(f"📊 تم العثور على {len(opportunities)} فرصة.")
-        send_scanner_report(opportunities, ctx)
+        scanner_ok = send_scanner_report(opportunities, ctx)
 
         print("💼 Preparing portfolio report...")
-        send_portfolio_report(analyze_user_portfolio(ctx))
+        portfolio_ok = send_portfolio_report(analyze_user_portfolio(ctx))
 
-        print("✅ تم الانتهاء من إرسال جميع التقارير بنجاح.")
+        if scanner_ok and portfolio_ok:
+            print("✅ تم الانتهاء من إرسال جميع التقارير بنجاح.")
+        else:
+            print("❌ فشل إرسال بعض الرسائل لتيليجرام - راجع الأسطر أعلاه (غالباً ADMIN_CHAT_ID أو TELEGRAM_TOKEN).")
+            sys.exit(1)
 
-    except Exception as e:  # noqa: BLE001
-        print(f"❌ Error while running bot: {e}")
+    except Exception:  # noqa: BLE001
+        print("❌ Error while running bot:")
+        traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
