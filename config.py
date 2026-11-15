@@ -11,7 +11,7 @@ _BASE = os.path.dirname(os.path.abspath(__file__))
 # تحذير: القيم هنا مكتوبة داخل الكود بطلب صاحب المشروع.
 # لو الريبو Public أي حد يقدر يشوف التوكن ويتحكم في البوت.
 # الأفضل: ريبو Private، أو رجّع القراءة من GitHub Secrets (os.getenv).
-TELEGRAM_TOKEN = "8636770275:AAEvrJ289sEUW1Yr2f2qBcB1Tsd2z1dcsc"
+TELEGRAM_TOKEN = "8636770275:AAE6J-Wcg7Pz0zdNglyUJw0vB7D-0WS09qE"
 ADMIN_CHAT_ID = "88742271"
 
 
