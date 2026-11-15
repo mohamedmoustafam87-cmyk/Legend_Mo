@@ -22,7 +22,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyTelegramBotAPI requests pandas numpy
+          pip install pyTelegramBotAPI
+          pip install requests
+          pip install pandas
+          pip install numpy
 
       - name: Run Bot Scanner
         env:
