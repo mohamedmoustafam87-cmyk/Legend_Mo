@@ -26,7 +26,7 @@ jobs:
 
       - name: Run Bot Scanner
         env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
+          TELEGRAM_TOKEN: ${{ 8636770275:AAE6J-Wcg7Pz0zdNglyUJw0vB7D-0WS09qE }}
+          ADMIN_CHAT_ID: ${{ 88742271 }}
         run: |
           python main.py
