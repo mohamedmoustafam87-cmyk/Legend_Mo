@@ -32,11 +32,26 @@ def is_manual_trigger():
     return os.getenv("GITHUB_EVENT_NAME", "workflow_dispatch") == "workflow_dispatch"
 
 
+def is_scheduled_report_time(now=None):
+    now = now or datetime.now(TIMEZONE)
+    if now.tzinfo is None:
+        raise ValueError("A timezone-aware datetime is required")
+    now = now.astimezone(TIMEZONE)
+    return any(
+        0 <= (now - now.replace(hour=hour, minute=minute, second=0,
+                              microsecond=0)).total_seconds()
+          < REPORT_TIME_TOLERANCE_MINUTES * 60
+        for hour, minute in REPORT_TIMES
+    )
+
+
 # =====================================================================
 # MAIN
 # =====================================================================
 
 def main():
+
+    dry_run = "--dry-run" in sys.argv
 
     print("🤖 Smart EGX Bot started...")
 
@@ -45,6 +60,14 @@ def main():
 
     elif not is_trading_day():
         print(f"⏭️ اليوم ليس يوم تداول (جمعة/سبت/إجازة) - تخطي. الوقت الآن بتوقيت القاهرة: {datetime.now(TIMEZONE):%Y-%m-%d %H:%M %A}")
+        return
+
+    elif not is_scheduled_report_time():
+        print("Outside configured report window; no scan or Telegram send.")
+        return
+
+    if dry_run:
+        print("DRY RUN: imports and schedule checks passed; no external calls or messages.")
         return
 
     try:
