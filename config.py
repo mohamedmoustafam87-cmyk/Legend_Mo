@@ -8,11 +8,9 @@ _BASE = os.path.dirname(os.path.abspath(__file__))
 # Telegram (لا يتم رفع خطأ وقت الاستيراد - يتحقق منه البوت فقط)
 # ==========================================================
 
-# تحذير: القيم هنا مكتوبة داخل الكود بطلب صاحب المشروع.
-# لو الريبو Public أي حد يقدر يشوف التوكن ويتحكم في البوت.
-# الأفضل: ريبو Private، أو رجّع القراءة من GitHub Secrets (os.getenv).
-TELEGRAM_TOKEN = "8636770275:AAE6J-Wcg7Pz0zdNglyUJw0vB7D-0WS09qE"
-ADMIN_CHAT_ID = "88742271"
+# Credentials are read only from the runtime environment. Never commit them.
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
+ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "").strip()
 
 
 def require_telegram():
