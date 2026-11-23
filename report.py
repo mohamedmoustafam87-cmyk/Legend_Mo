@@ -67,7 +67,7 @@ def safe_send_message(chat_id, text):
             bot.send_message(chat_id, plain)
             return True
         except Exception as e:  # noqa: BLE001
-            print(f"❌ Telegram send error: {e}")
+            print("Telegram send failed; check destination, permissions and token in Secrets.")
             return False
 
 
@@ -226,10 +226,12 @@ def format_scanner_messages(opportunities, ctx=None):
 
 def send_scanner_report(opportunities, ctx=None):
     try:
-        for message in format_scanner_messages(opportunities, ctx):
-            safe_send_message(ADMIN_CHAT_ID, message)
-    except Exception as e:  # noqa: BLE001
-        print(f"❌ Error sending scanner report: {e}")
+        results = [safe_send_message(ADMIN_CHAT_ID, message)
+                   for message in format_scanner_messages(opportunities, ctx)]
+        return bool(results) and all(results)
+    except Exception:
+        print("Scanner report failed. No credential values were logged.")
+        return False
 
 
 # =====================================================================
@@ -283,10 +285,11 @@ def format_portfolio_messages(results):
 def send_portfolio_report(results):
     try:
         if not results:
-            print("⚠️ لا توجد بيانات متاحة للمحفظة.")
-            return
-        for message in format_portfolio_messages(results):
-            safe_send_message(ADMIN_CHAT_ID, message)
-        print("✅ Portfolio report sent successfully.")
-    except Exception as e:  # noqa: BLE001
-        print(f"❌ Error sending portfolio report: {e}")
+            print("No portfolio data available; portfolio report skipped.")
+            return True
+        sent = [safe_send_message(ADMIN_CHAT_ID, message)
+                for message in format_portfolio_messages(results)]
+        return bool(sent) and all(sent)
+    except Exception:
+        print("Portfolio report failed. No credential values were logged.")
+        return False
