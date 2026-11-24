@@ -1,83 +1,156 @@
 import os
-import sys
-import traceback
 from datetime import datetime
 
+from scanner import scan_market
+from report import send_scanner_report, bot
 from config import (
     ADMIN_CHAT_ID,
     TIMEZONE,
     REPORT_TIMES,
-    REPORT_TIME_TOLERANCE_MINUTES,
-    TRADING_WEEKDAYS,
-    EGX_HOLIDAYS,
-    require_telegram,
+    REPORT_TIME_TOLERANCE_MINUTES
 )
-from scanner import scan_market
-from report import send_scanner_report, send_portfolio_report, safe_send_message
 from portfolio import analyze_user_portfolio
 
 
-# =====================================================================
-# SCHEDULE
-# =====================================================================
+# ==========================================================
+# Check If Now Is a Scheduled Report Time (Cairo Local Time)
+# ==========================================================
 
-def is_trading_day(now=None):
-    """الأحد..الخميس وليس إجازة رسمية (egx_holidays.txt)."""
-    now = now or datetime.now(TIMEZONE)
-    return now.weekday() in TRADING_WEEKDAYS and now.strftime("%Y-%m-%d") not in EGX_HOLIDAYS
+def is_scheduled_report_time():
+    """
+    بيتحقق إن التوقيت الحالي بتوقيت القاهرة قريب من أحد
+    المواعيد المحددة في REPORT_TIMES، بهامش REPORT_TIME_TOLERANCE_MINUTES.
+    بيتعامل تلقائيًا مع التوقيت الصيفي لأن TIMEZONE = Africa/Cairo.
+    """
 
+    now = datetime.now(TIMEZONE)
+    now_minutes = (now.hour * 60) + now.minute
+
+    for target_hour, target_minute in REPORT_TIMES:
+        target_minutes = (target_hour * 60) + target_minute
+
+        if abs(now_minutes - target_minutes) <= REPORT_TIME_TOLERANCE_MINUTES:
+            print(
+                f"⏰ الوقت الحالي ({now.strftime('%H:%M')}) "
+                f"يطابق الموعد المحدد ({target_hour:02d}:{target_minute:02d}) - جاري التنفيذ"
+            )
+            return True
+
+    return False
+
+
+# ==========================================================
+# Check If This Run Was Triggered Manually
+# ==========================================================
 
 def is_manual_trigger():
-    """السماح بتشغيل التقرير يدويًا من GitHub Actions."""
-    return os.getenv("GITHUB_EVENT_NAME", "workflow_dispatch") == "workflow_dispatch"
+    """
+    GitHub Actions بيحط اسم الحدث في GITHUB_EVENT_NAME.
+    لو التشغيل يدوي (زرار Run workflow) قيمتها 'workflow_dispatch'.
+    لو مش موجودة (تشغيل محلي على جهازك مثلاً) بنعتبره يدوي برضه.
+    """
+
+    event_name = os.getenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+    return event_name == "workflow_dispatch"
 
 
-# =====================================================================
-# MAIN
-# =====================================================================
+def send_portfolio_report():
+    try:
+        results = analyze_user_portfolio()
+        if not results:
+            return
+
+        msg = "💼 *تقرير متابعة محفظتك الخاصة (Portfolio Advisor)*\n\n"
+        
+        total_portfolio_value = 0
+        total_portfolio_pnl = 0
+
+        for item in results:
+            emoji_pnl = "🟢" if item["pnl_pct"] >= 0 else "🔴"
+            total_portfolio_value += item["current_value"]
+            total_portfolio_pnl += item["pnl_egp"]
+
+            msg += (
+                f"📌 *السهم:* `{item['ticker']}`\n"
+                f"📦 *الكمية:* `{item['shares']:,}` | *التكلفة:* `{item['buy_price']:.2f}` ج.م\n"
+                f"💵 *السعر الحالي:* `{item['price']:.2f}` ج.م\n"
+                f"{emoji_pnl} *الربح/الخسارة:* `{item['pnl_egp']:+,.2f}` ج.م (`{item['pnl_pct']:+.2f}%`)\n"
+                f"💡 *النصيحة:* *{item['advice']}*\n"
+                f"📝 *السبب:* {item['reason']}\n"
+                f"━━━━━━━━━━━━━━━━━━\n\n"
+            )
+
+        total_emoji = "🟢" if total_portfolio_pnl >= 0 else "🔴"
+        msg += (
+            f"📊 *إجمالي قيمة المحفظة:* `{total_portfolio_value:,.2f}` ج.م\n"
+            f"{total_emoji} *إجمالي الأرباح/الخسائر:* `{total_portfolio_pnl:+,.2f}` ج.م\n"
+        )
+
+        bot.send_message(ADMIN_CHAT_ID, msg, parse_mode="Markdown")
+        print("✅ تم إرسال تقرير المحفظة بنجاح.")
+
+    except Exception as e:
+        print(f"❌ Error sending portfolio report: {e}")
+
 
 def main():
 
-    print("🤖 Smart EGX Bot started...")
+    print(
+        "🤖 Smart EGX Bot started (Optimized & Portfolio Mode)..."
+    )
 
-    if is_manual_trigger():
-        print("🔵 Manual trigger detected.")
+    # ==========================================================
+    # 0. Skip Only If Automatic (Scheduled) Run AND Not a
+    #    Scheduled Report Time. Manual runs always execute.
+    # ==========================================================
 
-    elif not is_trading_day():
-        print(f"⏭️ اليوم ليس يوم تداول (جمعة/سبت/إجازة) - تخطي. الوقت الآن بتوقيت القاهرة: {datetime.now(TIMEZONE):%Y-%m-%d %H:%M %A}")
+    if not is_manual_trigger() and not is_scheduled_report_time():
+        print(
+            "⏭️ تشغيل تلقائي خارج مواعيد الإرسال المحددة - تخطي الـ scan والإرسال."
+        )
         return
 
+    if is_manual_trigger():
+        print(
+            "▶️ تشغيل يدوي (workflow_dispatch) - جاري التنفيذ بغض النظر عن التوقيت."
+        )
+
     try:
-        require_telegram()
 
-        # عند التشغيل: رسالة فورية تثبت إن التوكن والـ ID شغالين قبل السكان الطويل
-        if not safe_send_message(
-            ADMIN_CHAT_ID,
-            "🤖 *EGX Bot:* بدأ تشغيل البوت — جاري فحص الأسهم وإرسال التقرير والتوصيات.",
-        ):
-            print("❌ تيليجرام رفض رسالة الاختبار: راجع TELEGRAM_TOKEN و ADMIN_CHAT_ID في config.py "
-                  "(Unauthorized = توكن غلط | chat not found = ID غلط أو لم تضغط Start).")
-            sys.exit(1)
+        # ==========================================================
+        # 1. Scan Full EGX Market & Get Top 5 Filtered Opportunities
+        # ==========================================================
 
-        print("🔎 Starting EGX market scan...")
-        opportunities, ctx = scan_market(return_context=True)
+        opportunities = scan_market()
 
-        print(f"📊 تم العثور على {len(opportunities)} فرصة.")
-        scanner_ok = send_scanner_report(opportunities, ctx)
+        print(
+            f"📊 Scan completed successfully. "
+            f"Found top {len(opportunities)} strong opportunities."
+        )
 
-        print("💼 Preparing portfolio report...")
-        portfolio_ok = send_portfolio_report(analyze_user_portfolio(ctx))
+        # ==========================================================
+        # 2. Send Telegram Market Report (Top 5 Only)
+        # ==========================================================
 
-        if scanner_ok and portfolio_ok:
-            print("✅ تم الانتهاء من إرسال جميع التقارير والتوصيات بنجاح.")
-        else:
-            print("❌ فشل إرسال بعض الرسائل لتيليجرام - راجع الأسطر أعلاه (غالباً ADMIN_CHAT_ID أو TELEGRAM_TOKEN).")
-            sys.exit(1)
+        send_scanner_report(
+            opportunities
+        )
 
-    except Exception:  # noqa: BLE001
-        print("❌ Error while running bot:")
-        traceback.print_exc()
-        sys.exit(1)
+        # ==========================================================
+        # 3. Send User Portfolio Advisor Report
+        # ==========================================================
+
+        send_portfolio_report()
+
+        print(
+            "✅ All processes completed and reports sent successfully to Telegram."
+        )
+
+    except Exception as e:
+
+        print(
+            f"❌ Error while running bot: {e}"
+        )
 
 
 if __name__ == "__main__":
