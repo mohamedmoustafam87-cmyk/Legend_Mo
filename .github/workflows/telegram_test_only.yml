@@ -1,0 +1,73 @@
+name: Telegram One Message Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: telegram-one-message-test
+  cancel-in-progress: false
+
+jobs:
+  one-message:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Send one approved private test, without retries
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
+        shell: python
+        run: |
+          import json
+          import os
+          import sys
+          import urllib.request
+          import urllib.error
+
+          token = os.environ.get('TELEGRAM_TOKEN', '').strip()
+          destination = os.environ.get('ADMIN_CHAT_ID', '').strip()
+          if not token or not destination.isdecimal():
+              print('Missing token or invalid positive private chat ID. No message sent.')
+              sys.exit(1)
+
+          def call(method, values):
+              request = urllib.request.Request(
+                  'https://api.telegram.org/bot' + token + '/' + method,
+                  data=json.dumps(values).encode('utf-8'),
+                  headers={'Content-Type': 'application/json'},
+                  method='POST',
+              )
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  return json.load(response)
+
+          try:
+              chat = call('getChat', {'chat_id': destination})
+              if (not chat.get('ok') or
+                  chat.get('result', {}).get('type') != 'private' or
+                  str(chat.get('result', {}).get('id')) != destination):
+                  print('Destination validation failed. No message sent.')
+                  sys.exit(1)
+          except Exception:
+              print('Private destination check failed. No message sent. No secret values logged.')
+              sys.exit(1)
+
+          # Exactly one send attempt. Do not auto-retry an ambiguous response.
+          try:
+              result = call('sendMessage', {
+                  'chat_id': destination,
+                  'text': 'اختبار الإرسال: البوت متصل بنجاح',
+              })
+          except Exception:
+              print('Test response unavailable. Delivery is uncertain; do not rerun automatically.')
+              sys.exit(1)
+          if (result.get('ok') and
+              result.get('result', {}).get('chat', {}).get('type') == 'private' and
+              str(result.get('result', {}).get('chat', {}).get('id')) == destination and
+              result.get('result', {}).get('message_id')):
+              print('Telegram accepted one private test message. Ask the owner to confirm receipt.')
+          else:
+              print('Test was not confirmed. Do not rerun before checking receipt.')
+              sys.exit(1)
