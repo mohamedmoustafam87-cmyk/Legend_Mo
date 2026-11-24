@@ -3,7 +3,7 @@ from risk import calculate_risk_management
 from indicators import analyze_candlesticks
 
 
-def evaluate_stock_strategy(df, ticker_symbol):
+def evaluate_stock_strategy(df, ticker_symbol, min_score=MIN_SCORE_THRESHOLD):
 
     try:
 
@@ -559,6 +559,10 @@ def evaluate_stock_strategy(df, ticker_symbol):
         else:
             entry_status = "🟢 BUY - سعر الدخول قريب ومرتبط بالزخم الحالي"
 
+        # أسهم تحت حد الترشيح لا تُعرض كفرصة شراء أبدًا
+        if score < MIN_SCORE_THRESHOLD:
+            entry_status = "🟡 WAIT - الدرجة أقل من حد الترشيح"
+
         # ==========================================================
         # Risk Management
         # ==========================================================
@@ -624,7 +628,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
         # Final Recommendation
         # ==========================================================
 
-        if score < MIN_SCORE_THRESHOLD:
+        if min_score is not None and score < min_score:
             return None
         elif score >= 80 and forecast_1m_score >= 70:
             recommendation = "🔥 شراء قوي جداً"
@@ -641,6 +645,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
 
         return {
             "ticker": ticker_symbol.replace(".CA", ""),
+            "below_threshold": score < MIN_SCORE_THRESHOLD,
             "price": round(close_price, 2),
             "score": score,
             "score_breakdown": score_breakdown,

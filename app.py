@@ -754,24 +754,21 @@ def load_analysis(symbol, mubasher_prices, context):
     data = attach_context(data, context)
 
     try:
-        analysis = evaluate_stock_strategy(data, symbol)
+        try:
+            analysis = evaluate_stock_strategy(data, symbol, min_score=None)
+        except TypeError:
+            # نسخة الاستراتيجية المنتشرة لا تدعم معامل min_score بعد
+            analysis = evaluate_stock_strategy(data, symbol)
     except Exception:
         analysis = None
 
     if analysis is None:
         analysis = {
-            "score": 50,
-            "rec": "حيادي",
-            "trend_score": 10,
-            "momentum_score": 7,
-            "volume_score": 7,
-            "price_action_score": 7,
-            "sr_score": 7,
-            "money_flow_score": 5,
-            "volatility_score": 3,
-            "price_strength_score": 4,
+            "score": None,
+            "rec": "التحليل غير متاح",
             "setups": [],
-            "reasons": ["تم توليد تحليل افتراضي آمن لعدم توفر بيانات تفصيلية كافية."],
+            "reasons": ["تعذّر توليد تحليل حقيقي لهذا السهم حالياً (بيانات غير كافية أو غير صالحة)."],
+            "unavailable": True,
         }
 
     analysis["current_price"] = current_price
@@ -922,9 +919,12 @@ source = analysis.get("price_source", "Yahoo Finance")
 realtime = bool(analysis.get("is_realtime", False))
 
 trend = trend_description(df)
-score = clamp(analysis.get("score", 0))
-score_class = score_color(score)
+raw_score = analysis.get("score")
+score_available = isinstance(raw_score, (int, float)) and not pd.isna(raw_score)
+score = clamp(raw_score) if score_available else None
+score_class = score_color(score) if score_available else "yellow"
 score_max = safe_float(analysis.get("score_max"), 100) or 100
+below_threshold = bool(analysis.get("below_threshold", False))
 recommendation = analysis.get("rec", "حيادي")
 
 st.markdown(
@@ -1042,9 +1042,10 @@ with col1:
         f"""
 <div class="lm-card" style="height:140px;">
     <div class="score-label">تقييم LENS الشامل</div>
-    <div class="score-number {score_class}">{score:.0f}</div>
-    <div style="color:#737B85; font-size:11px; margin-top:7px;">/ {score_max:.0f} • {score_text(score)}</div>
-    <div class="progress-bg"><div class="progress-fill" style="width:{(score / score_max * 100) if score_max > 0 else 0:.0f}%;"></div></div>
+    <div class="score-number {score_class}">{f"{score:.0f}" if score_available else "غير متاح"}</div>
+    <div style="color:#737B85; font-size:11px; margin-top:7px;">{f"/ {score_max:.0f} • {score_text(score)}" if score_available else "لا يوجد تقييم حقيقي"}</div>
+    {f'<div style="color:#E8B54A; font-size:11px; margin-top:5px;">أقل من حد الترشيح 60 — للمتابعة فقط</div>' if (score_available and below_threshold) else ""}
+    <div class="progress-bg"><div class="progress-fill" style="width:{(score / score_max * 100) if (score_available and score_max > 0) else 0:.0f}%;"></div></div>
 </div>
 """,
         unsafe_allow_html=True,
