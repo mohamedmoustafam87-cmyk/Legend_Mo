@@ -1,0 +1,27 @@
+name: Update Existing Private Report Layout
+on:
+  push:
+    branches: [main]
+    paths: [reviewed_private_edit.enc.json]
+permissions:
+  contents: read
+concurrency:
+  group: legend-private-report-journal
+  cancel-in-progress: false
+jobs:
+  update-existing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install encryption dependency
+        run: python -m pip install 'cryptography>=43,<47'
+      - name: Update six accepted messages in place, no new messages
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
+          GH_TOKEN: ${{ github.token }}
+        run: python scoped_private_edit.py
