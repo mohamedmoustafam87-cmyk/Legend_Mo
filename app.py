@@ -696,7 +696,7 @@ def load_market_context():
 @st.cache_data(ttl=300, show_spinner=False)
 def load_analysis(symbol, mubasher_prices, context):
     try:
-        result = get_stock_data(symbol, mubasher_prices)
+        result = get_stock_data(symbol, mubasher_prices, allow_research=True)
     except Exception:
         result = None
 
@@ -711,6 +711,9 @@ def load_analysis(symbol, mubasher_prices, context):
 
     if df is None or not isinstance(df, pd.DataFrame) or df.empty:
         return None, None
+
+    if df.attrs.get("mode") == "close_research":
+        return df, {"mode": "close_research"}
 
     historical_close = safe_float(df.attrs.get("historical_close", df["Close"].iloc[-1]))
     current_price = safe_float(df.attrs.get("current_price", historical_close))
@@ -879,6 +882,12 @@ with st.spinner("جاري تحميل بيانات السوق والتحليل...
 
 if df is None or analysis is None:
     st.warning("⚠️ التحليل غير متاح: بيانات السعر غير كافية أو لم تجتز التحقق. لا توجد توصية لهذا السهم حالياً.")
+    st.stop()
+
+
+if analysis.get("mode") == "close_research":
+    from close_research import render_close_research
+    render_close_research(st, df, symbol)
     st.stop()
 
 

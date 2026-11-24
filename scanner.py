@@ -165,14 +165,16 @@ def fetch_yahoo_history(symbol, period="2y", interval="1d", drop_partial=True):
     try:
         payload = _get_json(
             YAHOO_CHART_URL + symbol,
-            params={
-                "range": period,
-                "interval": interval,
-                "events": "history",
-                "includeAdjustedClose": "true",
-            },
+            params={"range": period, "interval": interval, "events": "history", "includeAdjustedClose": "true"},
         )
+        return validate_yahoo_history(payload, symbol, interval, drop_partial)
+    except Exception as exc:
+        print(f"Yahoo data unavailable: {type(exc).__name__}")
+        return None
 
+
+def validate_yahoo_history(payload, symbol, interval="1d", drop_partial=True):
+    try:
         result = payload.get("chart", {}).get("result")
         if not result:
             return None
@@ -274,10 +276,19 @@ def fetch_yahoo_history(symbol, period="2y", interval="1d", drop_partial=True):
 # Current Price Metadata
 # ==========================================================
 
-def get_stock_data(symbol, mubasher_prices=None):
+def get_stock_data(symbol, mubasher_prices=None, allow_research=False):
 
     symbol = str(symbol).upper().strip()
-    df = fetch_yahoo_history(symbol)
+    if allow_research:
+        payload = _get_json(YAHOO_CHART_URL + symbol, params={"range": "2y", "interval": "1d", "events": "history", "includeAdjustedClose": "true"})
+        df = validate_yahoo_history(payload, symbol)
+        if df is None:
+            from close_research import build_close_research
+            research = build_close_research(payload, symbol, datetime.now(TIMEZONE))
+            if research is not None:
+                return research, "Yahoo limited daily research"
+    else:
+        df = fetch_yahoo_history(symbol)
 
     if df is None or df.empty:
         return None, "No Data"
