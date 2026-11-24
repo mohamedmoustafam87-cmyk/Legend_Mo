@@ -93,16 +93,41 @@ def _chunk(blocks, header, limit=3800):
     def units(text):return len(text.encode("utf-16-le")) // 2
     messages, current = [], header
     for block in blocks:
-        for line in block.splitlines(keepends=True):
-            while units(line) > limit - units(header):
-                take=1
-                while take<len(line) and units(line[:take+1])<=limit-units(header):take+=1
-                if current.strip()!=header.strip():messages.append(current)
-                messages.append(header+line[:take]);current=header;line=line[take:]
-            if units(current+line)>limit:
-                messages.append(current);current=header
-            current+=line
-    if current.strip()!=header.strip():messages.append(current)
+        # Keep a complete stock block together whenever it fits on one message.
+        if units(header + block) <= limit:
+            if units(current + block) > limit:
+                if current.strip() != header.strip():messages.append(current)
+                current = header
+            current += block
+            continue
+        # An oversized stock gets its own parts. Repeat its first two lines,
+        # which contain ticker and source session, before each continuation.
+        if current.strip() != header.strip():messages.append(current)
+        lines = block.splitlines(keepends=True)
+        identity = "".join(lines[:2])
+        prefix = header + identity
+        current = prefix
+        sections = "".join(lines[2:]).split("\n\n")
+        for section in sections:
+            section += "\n\n"
+            if units(prefix + section) <= limit:
+                if units(current + section) > limit:
+                    messages.append(current);current = prefix
+                current += section
+                continue
+            # Only an individually oversized section is split at line boundaries.
+            for line in section.splitlines(keepends=True):
+                while units(prefix + line) > limit:
+                    take = 1
+                    while take < len(line) and units(prefix + line[:take+1]) <= limit:take += 1
+                    if current.strip() != prefix.strip():messages.append(current)
+                    messages.append(prefix + line[:take]);current = prefix;line = line[take:]
+                if units(current + line) > limit:
+                    messages.append(current);current = prefix
+                current += line
+        if current.strip() != prefix.strip():messages.append(current)
+        current = header
+    if current.strip() != header.strip():messages.append(current)
     return messages
 
 

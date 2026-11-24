@@ -38,3 +38,16 @@ class FullResearchTests(TestCase):
  def test_new_report_is_review_only_without_explicit_execution_gate(self):
   with patch.object(report,'safe_send_message') as send:
    self.assertFalse(report.send_scanner_report([],{'close_research':[{}]}));send.assert_not_called()
+
+ def test_fitting_stock_blocks_never_split_between_messages(self):
+  r=research_record('COMI.CA',self.sample().load());other=dict(r,ticker='ETEL.CA')
+  msgs=report.format_scanner_messages([],{'close_research':[r,other],'n_full_analysis':0})
+  self.assertEqual(len(msgs),2)
+  self.assertIn('COMI.CA',msgs[0]);self.assertNotIn('ETEL.CA',msgs[0]);self.assertIn('متابعة المحفظة',msgs[0]);self.assertIn('ETEL.CA',msgs[1]);self.assertIn('متابعة المحفظة',msgs[1])
+ def test_oversize_stock_repeats_identity_and_preserves_sections(self):
+  identity='COMI.CA | Yahoo\n2026-11-23\n'
+  block=identity+'\n\n'.join('section'+str(i)+' '+('x'*1000) for i in range(6))
+  msgs=report._chunk([block],'REPORT\n',limit=2500)
+  self.assertGreater(len(msgs),1)
+  for msg in msgs:self.assertIn(identity,msg);self.assertLessEqual(len(msg.encode('utf-16-le'))//2,2500)
+  for i in range(6):self.assertTrue(any('section'+str(i)+' '+('x'*1000) in msg for msg in msgs))
