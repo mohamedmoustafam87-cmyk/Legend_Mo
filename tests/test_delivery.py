@@ -84,7 +84,9 @@ class ReportTests(unittest.TestCase):
     def test_plain_text_fallback(self):
         from unittest.mock import Mock
         bot = Mock()
-        bot.send_message.side_effect = [ValueError('format'), None]
+        error = ValueError('format')
+        error.result_json = {'error_code': 400, 'description': "Bad Request: can't parse entities"}
+        bot.send_message.side_effect = [error, None]
         with patch.object(report, 'get_bot', return_value=bot):
             self.assertTrue(report.safe_send_message('mock-destination', '*test*'))
             self.assertEqual(bot.send_message.call_count, 2)
@@ -95,6 +97,24 @@ class ReportTests(unittest.TestCase):
         bot.send_message.side_effect = ValueError('mock-failure')
         with patch.object(report, 'get_bot', return_value=bot):
             self.assertFalse(report.safe_send_message('mock-destination', 'test'))
+
+    def test_timeout_never_retries(self):
+        from unittest.mock import Mock
+        bot = Mock()
+        bot.send_message.side_effect = TimeoutError('mock-timeout')
+        with patch.object(report, 'get_bot', return_value=bot):
+            self.assertFalse(report.safe_send_message('mock-destination', '*test*'))
+        self.assertEqual(bot.send_message.call_count, 1)
+
+    def test_non_format_api_rejection_never_retries(self):
+        from unittest.mock import Mock
+        error = ValueError('mock-api-error')
+        error.result_json = {'error_code': 400, 'description': 'Bad Request: chat not found'}
+        bot = Mock()
+        bot.send_message.side_effect = error
+        with patch.object(report, 'get_bot', return_value=bot):
+            self.assertFalse(report.safe_send_message('mock-destination', 'test'))
+        self.assertEqual(bot.send_message.call_count, 1)
 
     def test_credentials_are_environment_reads(self):
         tree = ast.parse((ROOT / 'config.py').read_text())

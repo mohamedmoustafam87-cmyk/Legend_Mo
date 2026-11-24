@@ -55,20 +55,35 @@ def num(value, digits=2, default="—"):
         return default
 
 
+def _is_format_rejection(error):
+    # Only an explicit Bot API 400 parsing rejection proves no message was sent.
+    result = getattr(error, "result_json", None)
+    if not isinstance(result, dict) or result.get("error_code") != 400:
+        return False
+    description = str(result.get("description", "")).lower()
+    return any(marker in description for marker in (
+        "can't parse entities", "can't find end of the entity",
+        "unsupported start tag", "unclosed start tag",
+    ))
+
+
 def safe_send_message(chat_id, text):
-    """إرسال Markdown وإن فشل يُرسل كنص عادي."""
+    """Retry plain text only after a definitive formatting rejection."""
     bot = get_bot()
     try:
         bot.send_message(chat_id, text, parse_mode="Markdown")
         return True
-    except Exception:
-        try:
-            plain = text.replace("*", "").replace("`", "").replace("_", "")
-            bot.send_message(chat_id, plain)
-            return True
-        except Exception as e:  # noqa: BLE001
-            print("Telegram send failed; check destination, permissions and token in Secrets.")
+    except Exception as error:
+        if not _is_format_rejection(error):
+            print("Telegram send unconfirmed; no automatic retry. Check receipt before retrying.")
             return False
+    try:
+        plain = text.replace("*", "").replace("`", "").replace("_", "")
+        bot.send_message(chat_id, plain)
+        return True
+    except Exception:
+        print("Plain-text send unconfirmed; no automatic retry. Check receipt before retrying.")
+        return False
 
 
 def _chunk(blocks, header, limit=3800):
