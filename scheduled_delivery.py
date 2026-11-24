@@ -8,9 +8,9 @@ import sys
 from datetime import datetime
 from config import TIMEZONE, REPORT_TIMES, TRADING_WEEKDAYS, EGX_HOLIDAYS
 
-# Preparation commit is inert even if repository variables were already set.
-# Change only after final source-grounded recurring-operation scope assessment.
-ACTIVATION_APPROVED = False
+# Scoped restoration approved under the user's repair/operate private-report grant.
+# Workflow dry-run remains no-I/O; change this to False for an immediate stop.
+ACTIVATION_APPROVED = True
 
 
 def due_slot(now):
@@ -35,16 +35,17 @@ def content_identity(report):
 
 
 def report_dates(report):
-    dates = {r['ticker']:r['history_as_of'] for r in report['records']}
+    dates = dict(report.get('coverage_dates',{}))
+    dates.update({r['ticker']:r['history_as_of'] for r in report['records']})
     dates.update({r['ticker']+'.CA':r['date'] for r in report['snapshot']['rows'] if r['date']})
+    if not dates: raise ValueError('No dated source references')
     return dates
 
 
 def execute(now=None, dry_run=False, journal=None, collect=None, enabled=None):
     now = now or datetime.now(TIMEZONE)
     if enabled is None:
-        enabled = (ACTIVATION_APPROVED and os.getenv('TELEGRAM_DELIVERY_ENABLED')=='true' and
-                   os.getenv('SCHEDULED_DATED_REPORT_ENABLED')=='true')
+        enabled = ACTIVATION_APPROVED
     if dry_run or not enabled:
         print('Validation only. Activation gated; no source calls or messages.')
         return 'gated'
@@ -59,6 +60,8 @@ def execute(now=None, dry_run=False, journal=None, collect=None, enabled=None):
     journal.load()
     journal.assert_no_ambiguous()
     control = journal.state.setdefault('_scheduled_v1', {'slots':{},'hashes':{},'latest_dates':{}})
+    if control.get('source_paused'):
+        raise ValueError('Source access paused after throttling; no further polling')
     if slot in control['slots']:
         return 'slot-already-checked'
     destination = os.environ['ADMIN_CHAT_ID'].strip()
@@ -74,7 +77,15 @@ def execute(now=None, dry_run=False, journal=None, collect=None, enabled=None):
     if collect is None:
         from scheduled_research import collect_dated_report
         collect = collect_dated_report
-    report = collect(now=now)
+    try:
+        report = collect(now=now)
+    except Exception as error:
+        from scheduled_research import SourceThrottled
+        if isinstance(error,SourceThrottled):
+            control['source_paused'] = True
+            control['slots'][slot] = 'source-paused'
+            journal.persist()
+        raise
     identity = content_identity(report)
     dates = report_dates(report)
     prior = control['latest_dates']

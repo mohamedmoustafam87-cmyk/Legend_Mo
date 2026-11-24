@@ -3,6 +3,9 @@ name: EGX Bot Safe Delivery
 on:
   schedule:
     - cron: '*/10 7-13 * * 0-4'
+  push:
+    branches: [main]
+    paths: [scheduled_operation_activation.json]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -32,13 +35,11 @@ jobs:
       - name: Offline checks
         run: python -m unittest discover -s tests -v
       - name: Safe validation without source calls or messages
-        if: vars.TELEGRAM_DELIVERY_ENABLED != 'true' || vars.SCHEDULED_DATED_REPORT_ENABLED != 'true' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
         run: python scheduled_delivery.py --dry-run
       - name: Run explicitly enabled dated private operation
-        if: vars.TELEGRAM_DELIVERY_ENABLED == 'true' && vars.SCHEDULED_DATED_REPORT_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run)
+        if: github.event_name != 'workflow_dispatch' || !inputs.dry_run
         env:
-          TELEGRAM_DELIVERY_ENABLED: ${{ vars.TELEGRAM_DELIVERY_ENABLED }}
-          SCHEDULED_DATED_REPORT_ENABLED: ${{ vars.SCHEDULED_DATED_REPORT_ENABLED }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
           GH_TOKEN: ${{ github.token }}

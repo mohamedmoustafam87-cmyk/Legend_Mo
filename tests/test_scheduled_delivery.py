@@ -122,7 +122,7 @@ class ResearchIntegrationTests(unittest.TestCase):
         snapshot={'valued_count':1}
         calls=[]
         def fetch(url,params):calls.append(url);return {'sample':True}
-        with patch.object(r,'EGX_STOCKS',['COMI.CA','ETEL.CA']),patch.object(r,'SHARIA_EGX_STOCKS',['COMI.CA']),patch.object(r,'MY_PORTFOLIO',{'COMI':{},'ETEL':{}}),patch.object(r,'build_close_research',return_value=frame),patch.object(r,'research_record',return_value=record),patch.object(r,'build_portfolio_snapshot',return_value=snapshot) as build,patch.object(r,'compact_messages',return_value=['body']):
+        with patch.object(r,'EGX_STOCKS',['COMI.CA','ETEL.CA']),patch.object(r,'SHARIA_EGX_STOCKS',['COMI.CA']),patch.object(r,'MY_PORTFOLIO',{'COMI':{},'ETEL':{}}),patch.object(r,'build_close_research',return_value=frame),patch.object(r,'research_record',return_value=record),patch.object(r,'build_portfolio_snapshot',return_value=snapshot) as build,patch.object(r,'compact_messages',return_value=['body']),patch.object(r,'screen_records',return_value=([record],1)):
             result=r.collect_dated_report(now=clock(),fetch=fetch)
         self.assertEqual(len(calls),2)
         self.assertEqual(set(build.call_args.args[1]),{'COMI.CA','ETEL.CA'})
@@ -131,3 +131,36 @@ class ResearchIntegrationTests(unittest.TestCase):
         import scheduled_research as r
         with patch.object(r,'build_close_research',return_value=None):
             with self.assertRaises(ValueError):r.collect_dated_report(now=clock(),fetch=lambda *a,**k:{})
+
+
+class ScreenTests(unittest.TestCase):
+    def test_rule_screen_orders_liquidity_not_arbitrary_list(self):
+        import scheduled_research as r
+        import pandas as pd
+        def rec(ticker,volume=1):
+            return dict(ticker=ticker,Close=110,EMA20=108,EMA50=105,MA200=100,
+                RSI14=60,MACD_Hist=1,CMF_20=.1,Volume_Ratio=volume,ADX_14=25)
+        records=[rec('LOW.CA'),rec('NO.CA',.5),rec('HIGH.CA')]
+        frames={t:pd.DataFrame({'Close':[110.]*20,'Volume':[v]*20}) for t,v in [('LOW.CA',100),('NO.CA',500),('HIGH.CA',1000)]}
+        selected,count=r.screen_records(records,frames)
+        self.assertEqual([x['ticker'] for x in selected],['HIGH.CA','LOW.CA'])
+        self.assertEqual(count,2)
+        records[0]['RSI14']=None
+        self.assertEqual(len(r.screen_records(records,frames)[0]),1)
+    def test_public_request_is_no_session_and_stops_on_throttle(self):
+        import scheduled_research as r
+        response=type('Response',(),{'status_code':429})()
+        with patch.object(r,'EGX_STOCKS',['COMI.CA']),patch.object(r,'SHARIA_EGX_STOCKS',['COMI.CA']),patch.object(r,'MY_PORTFOLIO',{}),patch.object(r.requests,'get',return_value=response) as get:
+            with self.assertRaises(r.SourceThrottled):r.collect_dated_report(now=clock())
+        self.assertEqual(get.call_count,1)
+        self.assertNotIn('cookies',get.call_args.kwargs)
+        self.assertNotIn('auth',get.call_args.kwargs)
+    def test_throttle_persists_pause_and_never_repolls(self):
+        import scheduled_research as r
+        journal=Journal()
+        with patch.dict(os.environ,{'ADMIN_CHAT_ID':'12345'}):
+            with self.assertRaises(r.SourceThrottled):
+                delivery.execute(now=clock(),enabled=True,journal=journal,collect=lambda **_:(_ for _ in ()).throw(r.SourceThrottled()))
+            with self.assertRaises(ValueError):
+                delivery.execute(now=clock(hour=12,minute=31),enabled=True,journal=journal,collect=lambda **_:self.fail('source repoll'))
+        self.assertTrue(journal.state['_scheduled_v1']['source_paused'])
