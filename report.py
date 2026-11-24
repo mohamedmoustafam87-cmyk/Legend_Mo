@@ -223,6 +223,8 @@ def format_close_research_block(item):
     return (
         f"{item['ticker']} | Yahoo Finance | EGP\n"
         f"آخر إغلاق تاريخي بتاريخ {item['history_as_of']}: {num(item['Close'])} EGP\n"
+        f"فتح نفس الجلسة: {num(item.get('selected_open'), default='غير متاح')} EGP\n"
+        "الفتح غير المتاح لا يُستبدل بإغلاق أمس أو بفتح يوم أقدم.\n"
         f"EMA20 {num(item['EMA20'])} | EMA50 {num(item['EMA50'])} | MA200 {num(item['MA200'])}\n"
         f"RSI14 {num(item['RSI14'])}\n"
         f"الحساب على {item['observed_closes']} إغلاقًا متاحًا، وليس جلسات متصلة مؤكدة.\n"

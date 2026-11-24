@@ -436,6 +436,8 @@ def close_research_record(symbol, frame):
     last = frame.iloc[-1]
     return {"ticker": symbol, "mode": "close_research",
             "history_as_of": frame.attrs["history_as_of"], "currency": "EGP",
+            "selected_open": frame.attrs.get("selected_open"),
+            "selected_bar_ohlc_consistent": frame.attrs.get("selected_bar_ohlc_consistent", False),
             "gap_dates": frame.attrs["gap_dates"],
             "instrument_type": frame.attrs["instrument_type"],
             "observed_closes": len(frame),

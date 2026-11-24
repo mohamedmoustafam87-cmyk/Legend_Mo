@@ -36,6 +36,17 @@ def build_close_research(payload, symbol, now):
         rsi=100-100/(1+gain/loss.replace(0,np.nan))
         rsi=rsi.mask((loss==0)&(gain>0),100).mask((gain==0)&(loss>0),0)
         good['RSI14']=rsi
+        # Validate Open only for the SAME selected latest historical row. Never
+        # backtrack to a different date or manufacture Open from previous Close.
+        latest_date=good.index[-1]
+        source_index=list(pd.to_datetime(ts,unit='s',utc=True).tz_convert(TIMEZONE_NAME).tz_localize(None).normalize()).index(latest_date)
+        bar=[q[k][source_index] for k in ('open','high','low','close')]
+        valid_bar=all(isinstance(v,(int,float)) and not isinstance(v,bool) and np.isfinite(v) and v>0 for v in bar)
+        if valid_bar:
+            o,h,l,c=bar;epsilon=abs(c)*1e-6
+            valid_bar=h+epsilon>=max(o,c,l) and l-epsilon<=min(o,c,h)
+        good.attrs['selected_open']=float(bar[0]) if valid_bar else None
+        good.attrs['selected_bar_ohlc_consistent']=bool(valid_bar)
         good.attrs.update(mode='close_research',history_as_of=good.index[-1].date().isoformat(),
                           gap_dates=gaps,instrument_type=str(m.get('instrumentType','unknown')),
                           retrieved_at=now.isoformat(),age_days=(now.date()-good.index[-1].date()).days)
@@ -59,6 +70,10 @@ def render_close_research(st, df, symbol):
     gaps=df.attrs['gap_dates']
     st.warning('الحسابات على الإغلاقات المتاحة فقط، وليست جلسات متصلة مؤكدة. صفوف إغلاق مفقودة: '+str(len(gaps))+(' | التواريخ: '+', '.join(gaps) if gaps else '')+'. لم نتحقق من تقويم السوق، وقد توجد تواريخ غائبة أخرى. لا تعويض للأسعار المفقودة.')
     st.caption('وصف الأداة من Yahoo: '+df.attrs['instrument_type']+' | إغلاقات متاحة: '+str(len(df))+' | ليست عائدًا كليًا معدلًا بالتوزيعات. لا إثبات لأداء استراتيجية.')
+    selected_open=df.attrs.get('selected_open')
+    st.metric('Open EGP | '+df.attrs['history_as_of'], 'غير متاح' if selected_open is None else f'{selected_open:.2f}')
+    st.caption('الفتح والإغلاق لنفس التاريخ فقط. فتح غير متاح يعني أن شمعة هذا التاريخ لم تجتز فحص OHLC؛ لا نستبدلها بيوم أقدم. شمعة اليوم لا تُعتمد كنهائية حتى يتأكد اكتمالها؛ حاليًا نعرض جلسة سابقة فقط.')
+    st.caption('اتساق شمعة واحدة لا يثبت صحة تاريخ الشموع أو يفعّل نماذج متعددة الجلسات.')
     cols=st.columns(5);last=df.iloc[-1]
     for col,key,label in zip(cols,['Close','EMA20','EMA50','MA200','RSI14'],['Close EGP','EMA20 EGP','EMA50 EGP','MA200 EGP','RSI14']):
         value=last[key];col.metric(label,'غير متاح' if pd.isna(value) else f'{value:.2f}')

@@ -35,3 +35,12 @@ class CloseResearchTests(unittest.TestCase):
         for key in self.r()['indicators']['quote'][0]:self.r()['indicators']['quote'][0][key]=self.r()['indicators']['quote'][0][key][-10:]
         self.r()['timestamp']=self.r()['timestamp'][-10:]
         df=self.load();self.assertTrue(df[['EMA20','EMA50','MA200','RSI14']].isna().all().all())
+
+    def test_invalid_prior_open_is_unavailable_not_substituted(self):
+        df=self.load();self.assertIsNone(df.attrs['selected_open']);self.assertEqual(df.attrs['history_as_of'],'2026-11-23')
+    def test_valid_prior_open_is_same_session(self):
+        self.r()['indicators']['quote'][0]['open'][-2]=99.5
+        df=self.load();self.assertEqual(df.attrs['selected_open'],99.5);self.assertEqual(df.attrs['history_as_of'],'2026-11-23')
+    def test_today_not_promoted_just_because_values_exist(self):
+        self.now=self.now.replace(hour=16)
+        df=self.load();self.assertEqual(df.attrs['history_as_of'],'2026-11-23')
