@@ -31,6 +31,11 @@ if _missing_files:
     st.stop()
 
 try:
+    # Community Cloud can rerun this entrypoint while imported local modules
+    # remain cached. Refresh the complete dated-research dependency chain.
+    import importlib
+    for _module_name in ("indicators", "daily_research", "close_research", "scanner"):
+        importlib.reload(importlib.import_module(_module_name))
     from scanner import (
         get_stock_data,
         load_saved_context,
@@ -695,7 +700,7 @@ def load_market_context():
 # ============================================================
 
 @st.cache_data(ttl=300, show_spinner=False)
-def load_analysis(symbol, mubasher_prices, context, data_revision="dated-full-r5"):
+def load_analysis(symbol, mubasher_prices, context, data_revision="dated-full-r6"):
     try:
         result = get_stock_data(symbol, mubasher_prices, allow_research=True)
     except Exception as error:
@@ -884,7 +889,7 @@ with st.spinner("جاري تحميل بيانات السوق والتحليل...
         st.stop()
 
 st.markdown("<style>.block-container {padding-top:5rem !important;}</style>", unsafe_allow_html=True)
-st.caption("Yahoo dated analysis | build 2026-11-24-full-r5")
+st.caption("Yahoo dated analysis | build 2026-11-24-full-r6")
 if df is None or analysis is None:
     st.warning("⚠️ التحليل غير متاح: بيانات السعر غير كافية أو لم تجتز التحقق. لا توجد توصية لهذا السهم حالياً.")
     if isinstance(analysis, dict) and analysis.get("diagnostic"):
