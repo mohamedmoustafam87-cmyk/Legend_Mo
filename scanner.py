@@ -2,7 +2,7 @@ import json
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -75,7 +75,7 @@ def _get_json(url, params=None, retries=3):
         except Exception as exc:  # noqa: BLE001
             last_error = exc
             time.sleep(0.6 * (attempt + 1))
-    raise last_error
+    raise last_error or RuntimeError("Data provider unavailable")
 
 
 # ==========================================================
@@ -129,12 +129,53 @@ def drop_incomplete_bar(df, now=None):
     return df
 
 
+def latest_expected_session(now=None):
+    """Conservative expected complete daily session under configured calendar."""
+    now = now or datetime.now(TIMEZONE)
+    if now.tzinfo is None:
+        raise ValueError("Timezone-aware current time required")
+    now = now.astimezone(TIMEZONE)
+    session = now.date()
+    ready = MARKET_CLOSE[0] * 60 + MARKET_CLOSE[1] + BAR_COMPLETE_BUFFER_MIN
+    if now.hour * 60 + now.minute < ready:
+        session -= timedelta(days=1)
+    from config import TRADING_WEEKDAYS, EGX_HOLIDAYS
+    for _ in range(370):
+        if session.weekday() in TRADING_WEEKDAYS and session.isoformat() not in EGX_HOLIDAYS:
+            return session
+        session -= timedelta(days=1)
+    raise ValueError("Calendar has no valid session")
+
+
 def data_quality_ok(df, max_abs_move_pct=30.0, lookback=120):
-    """يستبعد الأسهم اللي فيها قفزات يومية غير منطقية (تقسيم/أسهم مجانية غير معدلة/خطأ بيانات)."""
+    """Reject inconsistent bars rather than manufacture corrected prices."""
     if df is None or len(df) < 30:
+        return False
+    columns = ["Open", "High", "Low", "Close", "Volume"]
+    if any(c not in df.columns for c in columns):
+        return False
+    values = df[columns].to_numpy(float)
+    if not np.isfinite(values).all():
+        return False
+    if (df[["Open", "High", "Low", "Close"]] <= 0).any().any() or (df["Volume"] < 0).any():
+        return False
+    epsilon = df["Close"].abs() * 1e-6
+    if ((df["High"] + epsilon < df[["Open", "Close", "Low"]].max(axis=1)) |
+            (df["Low"] - epsilon > df[["Open", "Close", "High"]].min(axis=1))).any():
+        return False
+    if not df.index.is_monotonic_increasing or df.index.has_duplicates:
         return False
     moves = df["Close"].pct_change().abs().tail(lookback) * 100
     return bool((moves.dropna() <= max_abs_move_pct).all())
+
+
+def history_metadata_ok(meta, symbol):
+    # This app's position sizing and P&L assume Egyptian-pound EGX equities.
+    return (meta.get("symbol") == symbol
+            and meta.get("currency") == "EGP"
+            and meta.get("exchangeName") in ("CAI", "EGX")
+            and meta.get("exchangeTimezoneName") == TIMEZONE_NAME
+            and meta.get("instrumentType") == "EQUITY")
 
 
 def fetch_yahoo_history(symbol, period="2y", interval="1d", drop_partial=True):
@@ -154,6 +195,10 @@ def fetch_yahoo_history(symbol, period="2y", interval="1d", drop_partial=True):
             return None
 
         result = result[0]
+        meta = result.get("meta") or {}
+        if not history_metadata_ok(meta, symbol):
+            print(f"Data unavailable: provider instrument metadata mismatch for {symbol}")
+            return None
         timestamps = result.get("timestamp")
         quote = result.get("indicators", {}).get("quote", [])
 
@@ -197,10 +242,26 @@ def fetch_yahoo_history(symbol, period="2y", interval="1d", drop_partial=True):
         if len(df) < MIN_HISTORY_ROWS:
             return None
 
+        now = datetime.now(TIMEZONE)
+        if df.index[-1].date() > now.date():
+            print(f"Data unavailable: future session for {symbol}")
+            return None
+        if df.index[-1].date() < latest_expected_session(now):
+            print(f"Data unavailable: latest complete session is missing for {symbol}")
+            return None
+
         if not data_quality_ok(df):
             print(f"⚠️ Data quality issue (قفزة غير منطقية): {symbol}")
             return None
 
+        df.attrs.update({
+            "history_as_of": df.index[-1].date().isoformat(),
+            "retrieved_at": now.isoformat(),
+            "currency": meta["currency"],
+            "exchange": meta["exchangeName"],
+            "price_basis": "Yahoo OHLC; split-adjusted close, not dividend total return",
+            "provider_delay_minutes": 20,
+        })
         return df
 
     except Exception as e:  # noqa: BLE001
@@ -225,18 +286,12 @@ def get_stock_data(symbol, mubasher_prices=None):
     if historical_close is None or historical_close <= 0:
         return None, "Invalid Historical Data"
 
-    mubasher_price = (mubasher_prices or {}).get(clean_symbol(symbol))
-
-    if mubasher_price is not None and mubasher_price > 0:
-        current_price = mubasher_price
-        price_source = "Mubasher Current"
-        is_realtime = True
-        data_source = "Yahoo Historical + Mubasher Current"
-    else:
-        current_price = historical_close
-        price_source = "Yahoo Last Close"
-        is_realtime = False
-        data_source = "Yahoo Historical + Yahoo Last Close"
+    # The legacy Mubasher map contains no exchange/currency/as-of evidence.
+    # Keep the argument for compatibility, but do not use it for a current quote.
+    current_price = historical_close
+    price_source = "Yahoo Last Complete Close"
+    is_realtime = False
+    data_source = "Yahoo validated daily history (not a live quote)"
 
     df.attrs.update({
         "symbol": symbol,
@@ -358,7 +413,9 @@ def scan_market(return_context=False):
     dfs = load_universe_frames(universe, mubasher_prices)
     print(f"📈 Tradable stocks loaded: {len(dfs)} / {len(universe)}")
 
-    ctx = market_context(dfs) if dfs else {}
+    if not dfs:
+        raise RuntimeError("No validated market data; no market report should be sent")
+    ctx = market_context(dfs)
     stats = load_model_stats()
 
     ctx.update({
@@ -383,6 +440,7 @@ def scan_market(return_context=False):
             for key in (
                 "current_price", "historical_close", "current_vs_close_pct",
                 "price_source", "is_realtime", "data_source",
+                "history_as_of", "retrieved_at", "currency", "price_basis",
             ):
                 analysis[key] = df.attrs.get(key)
 

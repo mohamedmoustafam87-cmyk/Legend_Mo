@@ -132,7 +132,7 @@ def _context_header(ctx):
             f"| نموذج الاحتمالية: {'مفعّل ✅' if ctx.get('meta_validated') else 'غير مفعّل'}"
         )
     else:
-        lines.append("⚠️ *لا توجد نتائج backtest* — الإشارات أدناه غير مُتحقق منها. شغّل backtest.py.")
+        lines.append("⚠️ *لا توجد نتائج backtest* — الإشارات أدناه غير مُتحقق منها. شغّل Backtest.py.")
 
     if ctx.get("sharia_filter_active") is False:
         lines.append("⚠️ فلتر الأسهم الشرعية غير مفعّل (أضف sharia_stocks.txt).")
@@ -173,17 +173,16 @@ def format_stock_block(item):
     change = safe_float(item.get("current_vs_close_pct"))
     realtime = item.get("is_realtime", False)
 
-    price_status = (
-        "🟢 السعر من Mubasher" if realtime else "🟡 آخر إغلاق Yahoo (Mubasher غير متاح)"
-    )
+    price_status = "🟡 آخر إغلاق مكتمل متحقق منه (ليس سعراً لحظياً)"
+    as_of = item.get("history_as_of", "غير متاح")
 
     block = (
         f"📌 *{ticker}* — {item.get('rec', '')}\n"
         f"⭐ Score فني: `{safe_int(item.get('score'))}/100` | الحالة: {item.get('trend_status', '—')}\n"
         + _setup_line(item)
         + "\n"
-        f"💵 *السعر الحالي:* `{current_price:.2f}` ج.م ({change:+.2f}% عن إغلاق `{hist_close:.2f}`)\n"
-        f"📡 {price_status}\n\n"
+        f"💵 *السعر المرجعي:* `{current_price:.2f}` ج.م ({change:+.2f}% عن إغلاق `{hist_close:.2f}`)\n"
+        f"📡 {price_status} | تاريخ البيانات: {as_of}\n\n"
         f"📍 *الدخول:* `{safe_float(item.get('ideal_entry')):.2f} - {safe_float(item.get('entry_high')):.2f}` "
         f"| {item.get('entry_status', '—')}\n"
         f"🛑 *وقف الخسارة:* `{safe_float(item.get('stop_loss')):.2f}` ({safe_float(item.get('stop_loss_pct')):.2f}%)\n"

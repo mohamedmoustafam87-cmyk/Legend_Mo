@@ -158,6 +158,10 @@ def load_model_stats(path=None):
         with open(path, "r", encoding="utf-8") as f:
             stats = json.load(f)
     except (OSError, ValueError):
+        _CACHE.update(path=path, mtime=mtime, stats=None, model=None)
+        return None
+    if not isinstance(stats, dict):
+        _CACHE.update(path=path, mtime=mtime, stats=None, model=None)
         return None
 
     model = None
