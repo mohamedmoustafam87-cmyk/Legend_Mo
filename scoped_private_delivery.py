@@ -14,10 +14,12 @@ def main():
     destination=os.environ['ADMIN_CHAT_ID'].strip()
     gh=os.environ['GH_TOKEN'].strip()
     repo=os.environ['GITHUB_REPOSITORY']
-    batch=os.environ['BATCH_ID']
+    from pathlib import Path
+    supplied=json.loads(Path('reviewed_private_batch.enc.json').read_text())
+    batch=supplied['batch_id']
     key=hashlib.sha256(token.encode()).digest()
     aes=AESGCM(key)
-    data=base64.b64decode(os.environ['ENCRYPTED_PAYLOAD'])
+    data=base64.b64decode(supplied['encrypted_payload'])
     payload=json.loads(aes.decrypt(data[:12],data[12:],b'LegendMo-private-report-v1'))
     raw=json.dumps(payload,ensure_ascii=False).encode()
     if hashlib.sha256(raw).hexdigest()!=batch:raise ValueError('Batch mismatch')

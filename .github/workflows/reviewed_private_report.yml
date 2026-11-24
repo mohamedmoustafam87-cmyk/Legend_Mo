@@ -2,15 +2,6 @@ name: Reviewed Private Report Delivery
 
 on:
   workflow_dispatch:
-    inputs:
-      encrypted_payload:
-        description: 'Encrypted reviewed report only, no plaintext financial details'
-        required: true
-        type: string
-      batch_id:
-        description: 'Stable reviewed batch identity'
-        required: true
-        type: string
 
 permissions:
   contents: write
@@ -35,6 +26,4 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
           GH_TOKEN: ${{ github.token }}
-          ENCRYPTED_PAYLOAD: ${{ inputs.encrypted_payload }}
-          BATCH_ID: ${{ inputs.batch_id }}
         run: python scoped_private_delivery.py
