@@ -140,3 +140,11 @@ REPORT_TIMES = [
 
 # هامش السماح بالدقائق - لو الـ workflow اتأخر عن الميعاد المحدد
 REPORT_TIME_TOLERANCE_MINUTES = 5
+
+# ==========================================================
+# Backtest.py Compatibility (not used by the bot itself)
+# ==========================================================
+
+ROUND_TRIP_COST_PCT = 0.5  # عمولات + ضرائب + انزلاق
+MODEL_STATS_FILE = os.getenv("MODEL_STATS_FILE", "model_stats.json")
+MAX_WORKERS = 6
