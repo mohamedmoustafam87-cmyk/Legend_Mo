@@ -41,7 +41,7 @@ class DataSafetyTests(unittest.TestCase):
         tree=ast.parse((Path(__file__).parents[1]/'app.py').read_text())
         fn=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='load_analysis')
         fn.decorator_list=[]
-        ns={'pd':pd,'np':np,'get_stock_data':lambda *x:(self.frame(),'test'),
+        ns={'pd':pd,'np':np,'get_stock_data':lambda *x,**kw:(self.frame(),'test'),
             'calculate_indicators':lambda x:x,'attach_context':lambda x,c:x,
             'evaluate_stock_strategy':lambda *x:None,'safe_float':lambda x,*d:float(x)}
         exec(compile(ast.Module(body=[fn],type_ignores=[]),'loader','exec'),ns)

@@ -697,11 +697,13 @@ def load_market_context():
 def load_analysis(symbol, mubasher_prices, context):
     try:
         result = get_stock_data(symbol, mubasher_prices, allow_research=True)
-    except Exception:
-        result = None
+    except Exception as error:
+        status = getattr(getattr(error, "response", None), "status_code", None)
+        detail = type(error).__name__ + (f" HTTP {int(status)}" if isinstance(status, int) else "")
+        return None, {"diagnostic": detail}
 
     if result is None:
-        return None, None
+        return None, {"diagnostic": "YAHOO_NO_RESULT"}
 
     if isinstance(result, tuple):
         df, source = result
@@ -710,7 +712,7 @@ def load_analysis(symbol, mubasher_prices, context):
         source = "غير معروف"
 
     if df is None or not isinstance(df, pd.DataFrame) or df.empty:
-        return None, None
+        return None, {"diagnostic": source}
 
     if df.attrs.get("mode") == "close_research":
         return df, {"mode": "close_research"}
@@ -880,8 +882,13 @@ with st.spinner("جاري تحميل بيانات السوق والتحليل...
         st.error(f"حدث خطأ أثناء التحليل: {e}")
         st.stop()
 
+st.markdown("<style>.block-container {padding-top:5rem !important;}</style>", unsafe_allow_html=True)
+st.caption("Yahoo dated analysis | build 2026-11-24-r3")
 if df is None or analysis is None:
     st.warning("⚠️ التحليل غير متاح: بيانات السعر غير كافية أو لم تجتز التحقق. لا توجد توصية لهذا السهم حالياً.")
+    if isinstance(analysis, dict) and analysis.get("diagnostic"):
+        st.caption("سبب عدم توفر بيانات قابلة للعرض، بدون تفاصيل سرية:")
+        st.code(analysis["diagnostic"], language=None)
     st.stop()
 
 

@@ -276,6 +276,23 @@ def validate_yahoo_history(payload, symbol, interval="1d", drop_partial=True):
 # Current Price Metadata
 # ==========================================================
 
+def yahoo_response_diagnostic(payload, symbol):
+    """Bounded non-secret facts only. Never expose raw provider text or request URLs."""
+    try:
+        r=payload.get("chart", {}).get("result")
+        if not r:return "YAHOO_EMPTY_RESULT"
+        r=r[0];m=r.get("meta") or {};q=(r.get("indicators", {}).get("quote") or [{}])[0]
+        fields={"symbol_match":m.get("symbol")==symbol,
+                "egp":m.get("currency")=="EGP", "egx":m.get("exchangeName") in ("CAI","EGX"),
+                "cairo":m.get("exchangeTimezoneName")==TIMEZONE_NAME,
+                "daily":m.get("dataGranularity")=="1d",
+                "timestamp_count":len(r.get("timestamp") or []),
+                "close_count":len(q.get("close") or []),
+                "close_nonnull":sum(x is not None for x in (q.get("close") or []))}
+        return "YAHOO_LIMITED_VIEW_REJECTED " + json.dumps(fields)
+    except (TypeError,KeyError,IndexError):return "YAHOO_MALFORMED_RESPONSE"
+
+
 def get_stock_data(symbol, mubasher_prices=None, allow_research=False):
 
     symbol = str(symbol).upper().strip()
@@ -287,6 +304,7 @@ def get_stock_data(symbol, mubasher_prices=None, allow_research=False):
             research = build_close_research(payload, symbol, datetime.now(TIMEZONE))
             if research is not None:
                 return research, "Yahoo limited daily research"
+            return None, yahoo_response_diagnostic(payload, symbol)
     else:
         df = fetch_yahoo_history(symbol)
 
