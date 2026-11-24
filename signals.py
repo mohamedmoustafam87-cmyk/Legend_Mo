@@ -270,8 +270,6 @@ def attach_context(df, ctx):
         return df
 
     last = df.index[-1]
-    if str(ctx.get("date", "")) != last.date().isoformat():
-        return df
 
     if ctx.get("breadth50") is not None:
         df.loc[last, "Breadth_50"] = ctx["breadth50"]

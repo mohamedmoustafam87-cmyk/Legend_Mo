@@ -31,17 +31,12 @@ if _missing_files:
     st.stop()
 
 try:
-    # Community Cloud can rerun this entrypoint while imported local modules
-    # remain cached. Refresh the complete dated-research dependency chain.
-    import importlib
-    for _module_name in ("indicators", "daily_research", "telegram_presentation", "research_dashboard", "close_research", "scanner"):
-        importlib.reload(importlib.import_module(_module_name))
     from scanner import (
+        fetch_mubasher_prices,
         get_stock_data,
         load_saved_context,
     )
 
-    from close_research import render_close_research
     from indicators import calculate_indicators
     from strategy import evaluate_stock_strategy
     from signals import attach_context, REGIME_LABELS
@@ -682,8 +677,10 @@ def build_radar(analysis):
 
 @st.cache_data(ttl=300, show_spinner=False)
 def load_market_prices():
-    # Yahoo-only reference mode. No secondary-provider quote lookup.
-    return {}
+    try:
+        return fetch_mubasher_prices()
+    except Exception:
+        return {}
 
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -700,16 +697,14 @@ def load_market_context():
 # ============================================================
 
 @st.cache_data(ttl=300, show_spinner=False)
-def load_analysis(symbol, mubasher_prices, context, data_revision="dated-dashboard-r7"):
+def load_analysis(symbol, mubasher_prices, context):
     try:
-        result = get_stock_data(symbol, mubasher_prices, allow_research=True)
-    except Exception as error:
-        status = getattr(getattr(error, "response", None), "status_code", None)
-        detail = type(error).__name__ + (f" HTTP {int(status)}" if isinstance(status, int) else "")
-        return None, {"diagnostic": detail}
+        result = get_stock_data(symbol, mubasher_prices)
+    except Exception:
+        result = None
 
     if result is None:
-        return None, {"diagnostic": "YAHOO_NO_RESULT"}
+        return None, None
 
     if isinstance(result, tuple):
         df, source = result
@@ -718,10 +713,7 @@ def load_analysis(symbol, mubasher_prices, context, data_revision="dated-dashboa
         source = "غير معروف"
 
     if df is None or not isinstance(df, pd.DataFrame) or df.empty:
-        return None, {"diagnostic": source}
-
-    if df.attrs.get("mode") == "close_research":
-        return df, {"mode": "close_research"}
+        return None, None
 
     historical_close = safe_float(df.attrs.get("historical_close", df["Close"].iloc[-1]))
     current_price = safe_float(df.attrs.get("current_price", historical_close))
@@ -752,15 +744,26 @@ def load_analysis(symbol, mubasher_prices, context, data_revision="dated-dashboa
         analysis = None
 
     if analysis is None:
-        return None, None
+        analysis = {
+            "score": 50,
+            "rec": "حيادي",
+            "trend_score": 10,
+            "momentum_score": 7,
+            "volume_score": 7,
+            "price_action_score": 7,
+            "sr_score": 7,
+            "money_flow_score": 5,
+            "volatility_score": 3,
+            "price_strength_score": 4,
+            "setups": [],
+            "reasons": ["تم توليد تحليل افتراضي آمن لعدم توفر بيانات تفصيلية كافية."],
+        }
 
     analysis["current_price"] = current_price
     analysis["historical_close"] = historical_close
     analysis["price_source"] = price_source
     analysis["is_realtime"] = is_realtime
     analysis["current_vs_close_pct"] = change_pct
-    analysis["history_as_of"] = attrs.get("history_as_of")
-    analysis["currency"] = attrs.get("currency")
 
     return data, analysis
 
@@ -888,18 +891,8 @@ with st.spinner("جاري تحميل بيانات السوق والتحليل...
         st.error(f"حدث خطأ أثناء التحليل: {e}")
         st.stop()
 
-st.markdown("<style>.block-container {padding-top:5rem !important;}</style>", unsafe_allow_html=True)
-st.caption("Yahoo dated analysis | build 2026-11-24-dashboard-r7")
 if df is None or analysis is None:
-    st.warning("⚠️ التحليل غير متاح: بيانات السعر غير كافية أو لم تجتز التحقق. لا توجد توصية لهذا السهم حالياً.")
-    if isinstance(analysis, dict) and analysis.get("diagnostic"):
-        st.caption("سبب عدم توفر بيانات قابلة للعرض، بدون تفاصيل سرية:")
-        st.code(analysis["diagnostic"], language=None)
-    st.stop()
-
-
-if analysis.get("mode") == "close_research":
-    render_close_research(st, df, symbol)
+    st.warning("⚠️ لا توجد بيانات تحليلية كافية لهذا السهم حالياً.")
     st.stop()
 
 
@@ -928,7 +921,7 @@ st.markdown(
             <div style="color:#707883; font-size:11px; margin-top:4px;">تحليل مخصص عبر legend-Mo LENS</div>
         </div>
         <div style="text-align:left;">
-            <div class="label">آخر إغلاق مكتمل متحقق منه</div>
+            <div class="label">السعر الحالي</div>
             <div class="big-value">{fmt(current_price)}</div>
             <div class="{'green' if change_pct >= 0 else 'red'}" style="font-size:12px; font-weight:700; margin-top:5px;">
                 {'▲' if change_pct >= 0 else '▼'} {pct(abs(change_pct))}
@@ -939,7 +932,7 @@ st.markdown(
     <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; direction:rtl; flex-wrap:wrap;">
         <div>
             <span class="label">مصدر السعر</span><br>
-            <span style="font-size:11px; color:#B8BEC6;">{source} • {analysis.get('history_as_of', 'تاريخ غير متاح')} • {analysis.get('currency', 'عملة غير متاحة')}</span>
+            <span style="font-size:11px; color:#B8BEC6;">{source} {' • مباشر' if realtime else ' • إغلاق سابق'}</span>
         </div>
         <div>
             <span class="label">الإغلاق التاريخي</span><br>

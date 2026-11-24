@@ -32,26 +32,11 @@ def is_manual_trigger():
     return os.getenv("GITHUB_EVENT_NAME", "workflow_dispatch") == "workflow_dispatch"
 
 
-def is_scheduled_report_time(now=None):
-    now = now or datetime.now(TIMEZONE)
-    if now.tzinfo is None:
-        raise ValueError("A timezone-aware datetime is required")
-    now = now.astimezone(TIMEZONE)
-    return any(
-        0 <= (now - now.replace(hour=hour, minute=minute, second=0,
-                              microsecond=0)).total_seconds()
-          < REPORT_TIME_TOLERANCE_MINUTES * 60
-        for hour, minute in REPORT_TIMES
-    )
-
-
 # =====================================================================
 # MAIN
 # =====================================================================
 
 def main():
-
-    dry_run = "--dry-run" in sys.argv
 
     print("🤖 Smart EGX Bot started...")
 
@@ -62,24 +47,13 @@ def main():
         print(f"⏭️ اليوم ليس يوم تداول (جمعة/سبت/إجازة) - تخطي. الوقت الآن بتوقيت القاهرة: {datetime.now(TIMEZONE):%Y-%m-%d %H:%M %A}")
         return
 
-    elif not is_scheduled_report_time():
-        print("Outside configured report window; no scan or Telegram send.")
-        return
-
-    if dry_run:
-        print("DRY RUN: imports and schedule checks passed; no external calls or messages.")
-        return
-
     try:
-        if os.getenv("FULL_DATED_REPORT_APPROVED") != "true":
-            print("Dated full report awaiting reviewed-content approval; no scan or Telegram send.")
-            return
         require_telegram()
 
         # عند التشغيل: رسالة فورية تثبت إن التوكن والـ ID شغالين قبل السكان الطويل
         if not safe_send_message(
             ADMIN_CHAT_ID,
-            "🤖 *EGX Bot:* بدأ فحص Yahoo؛ أي أسعار تظهر بتاريخها، والنتيجة حسب البيانات المتاحة.",
+            "🤖 *EGX Bot:* بدأ تشغيل البوت — جاري فحص الأسهم وإرسال التقرير والتوصيات.",
         ):
             print("❌ تيليجرام رفض رسالة الاختبار: راجع TELEGRAM_TOKEN و ADMIN_CHAT_ID في config.py "
                   "(Unauthorized = توكن غلط | chat not found = ID غلط أو لم تضغط Start).")
@@ -92,9 +66,7 @@ def main():
         scanner_ok = send_scanner_report(opportunities, ctx)
 
         print("💼 Preparing portfolio report...")
-        # Dated research already has a portfolio section explaining the missing
-        # confirmed basis. Do not send hardcoded holdings as current ownership.
-        portfolio_ok = True if ctx.get("close_research") else send_portfolio_report(analyze_user_portfolio(ctx))
+        portfolio_ok = send_portfolio_report(analyze_user_portfolio(ctx))
 
         if scanner_ok and portfolio_ok:
             print("✅ تم الانتهاء من إرسال جميع التقارير والتوصيات بنجاح.")

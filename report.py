@@ -1,4 +1,3 @@
-import os
 from datetime import datetime
 
 from config import (
@@ -56,78 +55,32 @@ def num(value, digits=2, default="—"):
         return default
 
 
-def _is_format_rejection(error):
-    # Only an explicit Bot API 400 parsing rejection proves no message was sent.
-    result = getattr(error, "result_json", None)
-    if not isinstance(result, dict) or result.get("error_code") != 400:
-        return False
-    description = str(result.get("description", "")).lower()
-    return any(marker in description for marker in (
-        "can't parse entities", "can't find end of the entity",
-        "unsupported start tag", "unclosed start tag",
-    ))
-
-
 def safe_send_message(chat_id, text):
-    """Retry plain text only after a definitive formatting rejection."""
+    """إرسال Markdown وإن فشل يُرسل كنص عادي."""
     bot = get_bot()
     try:
         bot.send_message(chat_id, text, parse_mode="Markdown")
         return True
-    except Exception as error:
-        if not _is_format_rejection(error):
-            print("Telegram send unconfirmed; no automatic retry. Check receipt before retrying.")
-            return False
-    try:
-        plain = text.replace("*", "").replace("`", "").replace("_", "")
-        bot.send_message(chat_id, plain)
-        return True
     except Exception:
-        print("Plain-text send unconfirmed; no automatic retry. Check receipt before retrying.")
-        return False
+        try:
+            plain = text.replace("*", "").replace("`", "").replace("_", "")
+            bot.send_message(chat_id, plain)
+            return True
+        except Exception as e:  # noqa: BLE001
+            print(f"❌ Telegram send error: {e}")
+            return False
 
 
 def _chunk(blocks, header, limit=3800):
-    # Split oversized stock blocks at line boundaries, preserving every section.
-    # Telegram measures UTF-16 code units, not Python code points.
-    def units(text):return len(text.encode("utf-16-le")) // 2
     messages, current = [], header
     for block in blocks:
-        # Keep a complete stock block together whenever it fits on one message.
-        if units(header + block) <= limit:
-            if units(current + block) > limit:
-                if current.strip() != header.strip():messages.append(current)
-                current = header
+        if len(current) + len(block) > limit and current.strip() != header.strip():
+            messages.append(current)
+            current = "🏆 *تكملة التقرير*\n\n" + block
+        else:
             current += block
-            continue
-        # An oversized stock gets its own parts. Repeat its first two lines,
-        # which contain ticker and source session, before each continuation.
-        if current.strip() != header.strip():messages.append(current)
-        lines = block.splitlines(keepends=True)
-        identity = "".join(lines[:2])
-        prefix = header + identity
-        current = prefix
-        sections = "".join(lines[2:]).split("\n\n")
-        for section in sections:
-            section += "\n\n"
-            if units(prefix + section) <= limit:
-                if units(current + section) > limit:
-                    messages.append(current);current = prefix
-                current += section
-                continue
-            # Only an individually oversized section is split at line boundaries.
-            for line in section.splitlines(keepends=True):
-                while units(prefix + line) > limit:
-                    take = 1
-                    while take < len(line) and units(prefix + line[:take+1]) <= limit:take += 1
-                    if current.strip() != prefix.strip():messages.append(current)
-                    messages.append(prefix + line[:take]);current = prefix;line = line[take:]
-                if units(current + line) > limit:
-                    messages.append(current);current = prefix
-                current += line
-        if current.strip() != prefix.strip():messages.append(current)
-        current = header
-    if current.strip() != header.strip():messages.append(current)
+    if current.strip():
+        messages.append(current)
     return messages
 
 
@@ -164,7 +117,7 @@ def _context_header(ctx):
             f"| نموذج الاحتمالية: {'مفعّل ✅' if ctx.get('meta_validated') else 'غير مفعّل'}"
         )
     else:
-        lines.append("⚠️ *لا توجد نتائج backtest* — الإشارات أدناه غير مُتحقق منها. شغّل Backtest.py.")
+        lines.append("⚠️ *لا توجد نتائج backtest* — الإشارات أدناه غير مُتحقق منها. شغّل backtest.py.")
 
     if ctx.get("sharia_filter_active") is False:
         lines.append("⚠️ فلتر الأسهم الشرعية غير مفعّل (أضف sharia_stocks.txt).")
@@ -205,16 +158,17 @@ def format_stock_block(item):
     change = safe_float(item.get("current_vs_close_pct"))
     realtime = item.get("is_realtime", False)
 
-    price_status = "🟡 آخر إغلاق تاريخي من Yahoo (ليس سعراً لحظياً)"
-    as_of = item.get("history_as_of", "غير متاح")
+    price_status = (
+        "🟢 السعر من Mubasher" if realtime else "🟡 آخر إغلاق Yahoo (Mubasher غير متاح)"
+    )
 
     block = (
         f"📌 *{ticker}* — {item.get('rec', '')}\n"
         f"⭐ Score فني: `{safe_int(item.get('score'))}/100` | الحالة: {item.get('trend_status', '—')}\n"
         + _setup_line(item)
         + "\n"
-        f"💵 *السعر المرجعي:* `{current_price:.2f}` ج.م ({change:+.2f}% عن إغلاق `{hist_close:.2f}`)\n"
-        f"📡 {price_status} | تاريخ البيانات: {as_of}\n\n"
+        f"💵 *السعر الحالي:* `{current_price:.2f}` ج.م ({change:+.2f}% عن إغلاق `{hist_close:.2f}`)\n"
+        f"📡 {price_status}\n\n"
         f"📍 *الدخول:* `{safe_float(item.get('ideal_entry')):.2f} - {safe_float(item.get('entry_high')):.2f}` "
         f"| {item.get('entry_status', '—')}\n"
         f"🛑 *وقف الخسارة:* `{safe_float(item.get('stop_loss')):.2f}` ({safe_float(item.get('stop_loss_pct')):.2f}%)\n"
@@ -250,18 +204,7 @@ def format_stock_block(item):
     return block + "\n━━━━━━━━━━━━━━━━━━\n\n"
 
 
-def format_close_research_block(item):
-    from daily_research import format_research
-    return format_research(item)
-
-
 def format_scanner_messages(opportunities, ctx=None):
-    ctx = ctx or {}
-    research = ctx.get("close_research") or []
-    limited = _chunk([format_close_research_block(i) for i in research],
-        "التقرير الفني اليومي من Yahoo Finance\nالأسعار مؤرخة وليست أسعار الجلسة الحالية.\n\n") if research else []
-    if research and not ctx.get("n_full_analysis") and not opportunities:
-        return limited
     header = _context_header(ctx)
 
     if not opportunities:
@@ -274,24 +217,19 @@ def format_scanner_messages(opportunities, ctx=None):
             body += "\n👀 *مراقبة (بدون إعداد نشط):*\n" + "\n".join(
                 f"• {w['ticker']} — Score {w['score']}" for w in watch
             ) + "\n"
-        return [header + body + "\n" + DISCLAIMER] + limited
+        return [header + body + "\n" + DISCLAIMER]
 
     messages = _chunk([format_stock_block(i) for i in opportunities], header)
     messages[-1] += DISCLAIMER
-    return messages + limited
+    return messages
 
 
 def send_scanner_report(opportunities, ctx=None):
-    if (ctx or {}).get("close_research") and os.getenv("FULL_DATED_REPORT_APPROVED") != "true":
-        print("New dated full report is review-only. No Telegram message sent.")
-        return False
     try:
-        results = [safe_send_message(ADMIN_CHAT_ID, message)
-                   for message in format_scanner_messages(opportunities, ctx)]
-        return bool(results) and all(results)
-    except Exception:
-        print("Scanner report failed. No credential values were logged.")
-        return False
+        for message in format_scanner_messages(opportunities, ctx):
+            safe_send_message(ADMIN_CHAT_ID, message)
+    except Exception as e:  # noqa: BLE001
+        print(f"❌ Error sending scanner report: {e}")
 
 
 # =====================================================================
@@ -345,23 +283,10 @@ def format_portfolio_messages(results):
 def send_portfolio_report(results):
     try:
         if not results:
-            print("No portfolio data available; portfolio report skipped.")
-            return True
-        sent = [safe_send_message(ADMIN_CHAT_ID, message)
-                for message in format_portfolio_messages(results)]
-        return bool(sent) and all(sent)
-    except Exception:
-        print("Portfolio report failed. No credential values were logged.")
-        return False
-
-
-def format_dated_portfolio_messages(snapshot):
-    """Private review output, no side effects or implicit delivery approval."""
-    from portfolio_research import format_private_portfolio
-    return format_private_portfolio(snapshot)
-
-
-def format_readable_private_report(records, portfolio_snapshot=None):
-    """Meaning-first Telegram layout only, no app/data/send-state mutation."""
-    from telegram_presentation import compact_messages
-    return compact_messages(records, portfolio_snapshot)
+            print("⚠️ لا توجد بيانات متاحة للمحفظة.")
+            return
+        for message in format_portfolio_messages(results):
+            safe_send_message(ADMIN_CHAT_ID, message)
+        print("✅ Portfolio report sent successfully.")
+    except Exception as e:  # noqa: BLE001
+        print(f"❌ Error sending portfolio report: {e}")

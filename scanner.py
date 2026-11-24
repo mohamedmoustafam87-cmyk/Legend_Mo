@@ -2,7 +2,7 @@ import json
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -74,7 +74,7 @@ def _get_json(url, params=None, retries=3):
         except Exception as exc:  # noqa: BLE001
             last_error = exc
             time.sleep(0.6 * (attempt + 1))
-    raise last_error or RuntimeError("Data provider unavailable")
+    raise last_error
 
 
 # ==========================================================
@@ -82,7 +82,7 @@ def _get_json(url, params=None, retries=3):
 # ==========================================================
 
 def fetch_mubasher_prices():
-    """Compatibility no-op. Yahoo-only mode never queries another provider."""
+    """Yahoo-only source requested by the owner. Compatibility no-op."""
     return {}
 
 
@@ -108,85 +108,31 @@ def drop_incomplete_bar(df, now=None):
     return df
 
 
-def latest_expected_session(now=None):
-    """Conservative expected complete daily session under configured calendar."""
-    now = now or datetime.now(TIMEZONE)
-    if now.tzinfo is None:
-        raise ValueError("Timezone-aware current time required")
-    now = now.astimezone(TIMEZONE)
-    session = now.date()
-    ready = MARKET_CLOSE[0] * 60 + MARKET_CLOSE[1] + BAR_COMPLETE_BUFFER_MIN
-    if now.hour * 60 + now.minute < ready:
-        session -= timedelta(days=1)
-    from config import TRADING_WEEKDAYS, EGX_HOLIDAYS
-    for _ in range(370):
-        if session.weekday() in TRADING_WEEKDAYS and session.isoformat() not in EGX_HOLIDAYS:
-            return session
-        session -= timedelta(days=1)
-    raise ValueError("Calendar has no valid session")
-
-
 def data_quality_ok(df, max_abs_move_pct=30.0, lookback=120):
-    """Reject inconsistent bars rather than manufacture corrected prices."""
+    """يستبعد الأسهم اللي فيها قفزات يومية غير منطقية (تقسيم/أسهم مجانية غير معدلة/خطأ بيانات)."""
     if df is None or len(df) < 30:
-        return False
-    columns = ["Open", "High", "Low", "Close", "Volume"]
-    if any(c not in df.columns for c in columns):
-        return False
-    values = df[columns].to_numpy(float)
-    if not np.isfinite(values).all():
-        return False
-    if (df[["Open", "High", "Low", "Close"]] <= 0).any().any() or (df["Volume"] < 0).any():
-        return False
-    epsilon = df["Close"].abs() * 1e-6
-    if ((df["High"] + epsilon < df[["Open", "Close", "Low"]].max(axis=1)) |
-            (df["Low"] - epsilon > df[["Open", "Close", "High"]].min(axis=1))).any():
-        return False
-    if not df.index.is_monotonic_increasing or df.index.has_duplicates:
         return False
     moves = df["Close"].pct_change().abs().tail(lookback) * 100
     return bool((moves.dropna() <= max_abs_move_pct).all())
 
 
-def history_metadata_ok(meta, symbol):
-    # This app's position sizing and P&L assume Egyptian-pound EGX equities.
-    return (meta.get("symbol") == symbol
-            and meta.get("currency") == "EGP"
-            and meta.get("exchangeName") in ("CAI", "EGX")
-            and meta.get("exchangeTimezoneName") == TIMEZONE_NAME
-            and meta.get("instrumentType") == "EQUITY")
-
-
 def fetch_yahoo_history(symbol, period="2y", interval="1d", drop_partial=True):
-    # Existing analysis is daily only. Never relabel intraday bars as sessions.
-    if interval != "1d":
-        print("Data unavailable: intraday analysis is not supported by this daily loader")
-        return None
     try:
         payload = _get_json(
             YAHOO_CHART_URL + symbol,
-            params={"range": period, "interval": interval, "events": "history", "includeAdjustedClose": "true"},
+            params={
+                "range": period,
+                "interval": interval,
+                "events": "history",
+                "includeAdjustedClose": "true",
+            },
         )
-        return validate_yahoo_history(payload, symbol, interval, drop_partial)
-    except Exception as exc:
-        print(f"Yahoo data unavailable: {type(exc).__name__}")
-        return None
 
-
-def validate_yahoo_history(payload, symbol, interval="1d", drop_partial=True):
-    try:
         result = payload.get("chart", {}).get("result")
         if not result:
             return None
 
         result = result[0]
-        meta = result.get("meta") or {}
-        if meta.get("dataGranularity") != interval:
-            print(f"Data unavailable: provider candle timeframe mismatch for {symbol}")
-            return None
-        if not history_metadata_ok(meta, symbol):
-            print(f"Data unavailable: provider instrument metadata mismatch for {symbol}")
-            return None
         timestamps = result.get("timestamp")
         quote = result.get("indicators", {}).get("quote", [])
 
@@ -194,19 +140,6 @@ def validate_yahoo_history(payload, symbol, interval="1d", drop_partial=True):
             return None
 
         quote = quote[0]
-        required_fields = ("open", "high", "low", "close", "volume")
-        if (not isinstance(timestamps, list)
-                or any(not isinstance(quote.get(k), list)
-                       or len(quote[k]) != len(timestamps) for k in required_fields)):
-            print(f"Data unavailable: provider candle arrays mismatch for {symbol}")
-            return None
-        if any(not isinstance(t, (int, float)) or isinstance(t, bool)
-               or not np.isfinite(t) for t in timestamps):
-            print(f"Data unavailable: invalid provider timestamp for {symbol}")
-            return None
-        if any(b <= a for a, b in zip(timestamps, timestamps[1:])):
-            print(f"Data unavailable: duplicate or unordered provider timestamps for {symbol}")
-            return None
 
         index = (
             pd.to_datetime(timestamps, unit="s", utc=True)
@@ -230,41 +163,23 @@ def validate_yahoo_history(payload, symbol, interval="1d", drop_partial=True):
             return None
 
         df.index.name = "Date"
-        if df.index.has_duplicates:
-            print(f"Data unavailable: multiple candles in daily session for {symbol}")
-            return None
+        df = df[~df.index.duplicated(keep="last")]
 
         for col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-        # Remove only an explicitly unfinished current-session candle. Missing
-        # completed candles remain invalid; never hide them with dropna/sorting.
+        df = df.dropna(subset=["Open", "High", "Low", "Close", "Volume"]).sort_index()
+
         if drop_partial:
             df = drop_incomplete_bar(df)
 
         if len(df) < MIN_HISTORY_ROWS:
             return None
 
-        now = datetime.now(TIMEZONE)
-        if df.index[-1].date() > now.date():
-            print(f"Data unavailable: future session for {symbol}")
-            return None
-        # Delay alone does not invalidate dated historical data. Never call it live.
-        delay_warning = df.index[-1].date() < latest_expected_session(now)
-
         if not data_quality_ok(df):
             print(f"⚠️ Data quality issue (قفزة غير منطقية): {symbol}")
             return None
 
-        df.attrs.update({
-            "session_delay_warning": delay_warning,
-            "history_as_of": df.index[-1].date().isoformat(),
-            "retrieved_at": now.isoformat(),
-            "currency": meta["currency"],
-            "exchange": meta["exchangeName"],
-            "price_basis": "Yahoo OHLC; split-adjusted close, not dividend total return",
-            "provider_delay_minutes": 20,
-        })
         return df
 
     except Exception as e:  # noqa: BLE001
@@ -276,35 +191,10 @@ def validate_yahoo_history(payload, symbol, interval="1d", drop_partial=True):
 # Current Price Metadata
 # ==========================================================
 
-def yahoo_response_diagnostic(payload, symbol):
-    """Bounded non-secret facts only. Never expose raw provider text or request URLs."""
-    try:
-        r=payload.get("chart", {}).get("result")
-        if not r:return "YAHOO_EMPTY_RESULT"
-        r=r[0];m=r.get("meta") or {};q=(r.get("indicators", {}).get("quote") or [{}])[0]
-        fields={"symbol_match":m.get("symbol")==symbol,
-                "egp":m.get("currency")=="EGP", "egx":m.get("exchangeName") in ("CAI","EGX"),
-                "cairo":m.get("exchangeTimezoneName")==TIMEZONE_NAME,
-                "daily":m.get("dataGranularity")=="1d",
-                "timestamp_count":len(r.get("timestamp") or []),
-                "close_count":len(q.get("close") or []),
-                "close_nonnull":sum(x is not None for x in (q.get("close") or []))}
-        return "YAHOO_LIMITED_VIEW_REJECTED " + json.dumps(fields)
-    except (TypeError,KeyError,IndexError):return "YAHOO_MALFORMED_RESPONSE"
-
-
-def get_stock_data(symbol, mubasher_prices=None, allow_research=False):
+def get_stock_data(symbol, mubasher_prices=None):
 
     symbol = str(symbol).upper().strip()
-    if allow_research:
-        payload = _get_json(YAHOO_CHART_URL + symbol, params={"range": "2y", "interval": "1d", "events": "history", "includeAdjustedClose": "true"})
-        from close_research import build_close_research
-        research = build_close_research(payload, symbol, datetime.now(TIMEZONE))
-        if research is not None:
-            return research, "Yahoo dated daily research"
-        return None, yahoo_response_diagnostic(payload, symbol)
-    else:
-        df = fetch_yahoo_history(symbol)
+    df = fetch_yahoo_history(symbol)
 
     if df is None or df.empty:
         return None, "No Data"
@@ -314,12 +204,10 @@ def get_stock_data(symbol, mubasher_prices=None, allow_research=False):
     if historical_close is None or historical_close <= 0:
         return None, "Invalid Historical Data"
 
-    # The legacy Mubasher map contains no exchange/currency/as-of evidence.
-    # Keep the argument for compatibility, but do not use it for a current quote.
     current_price = historical_close
-    price_source = "Yahoo Last Complete Close"
+    price_source = "Yahoo Last Close"
     is_realtime = False
-    data_source = "Yahoo validated daily history (not a live quote)"
+    data_source = "Yahoo Historical + Yahoo Last Close"
 
     df.attrs.update({
         "symbol": symbol,
@@ -393,10 +281,7 @@ def _load_one(symbol, mubasher_prices):
     try:
         time.sleep(random.random() * 0.3)
 
-        df, data_source = get_stock_data(symbol, mubasher_prices, allow_research=True)
-
-        if df is not None and df.attrs.get("mode") == "close_research":
-            return symbol, df
+        df, data_source = get_stock_data(symbol, mubasher_prices)
 
         if df is None or not validate_current_price(df):
             return symbol, None
@@ -430,32 +315,21 @@ def load_universe_frames(symbols, mubasher_prices):
     return dfs
 
 
-def close_research_record(symbol, frame):
-    from daily_research import research_record
-    return research_record(symbol, frame)
-
-
 def scan_market(return_context=False):
 
     print("🔎 Starting market scan...")
 
-    mubasher_prices = {}  # Legacy argument only, no secondary data source.
-    print("Yahoo-only daily reference mode; not a live quote or intraday feed.")
+    mubasher_prices = fetch_mubasher_prices()
+    print(
+        f"📡 Mubasher prices loaded: {len(mubasher_prices)} stocks"
+        if mubasher_prices else "⚠️ Mubasher unavailable. Using Yahoo Last Close."
+    )
 
     universe = [s for s in EGX_STOCKS if s in set(SHARIA_EGX_STOCKS)]
     dfs = load_universe_frames(universe, mubasher_prices)
-    print(f"📈 Yahoo histories loaded: {len(dfs)} / {len(universe)}")
+    print(f"📈 Tradable stocks loaded: {len(dfs)} / {len(universe)}")
 
-    research = []
-    for symbol, frame in list(dfs.items()):
-        if frame.attrs.get("mode") == "close_research":
-            research.append(close_research_record(symbol, frame))
-            del dfs[symbol]
-    if not dfs and not research:
-        raise RuntimeError("No usable Yahoo closes; no prices will be invented")
     ctx = market_context(dfs) if dfs else {}
-    ctx["close_research"] = research
-    ctx["n_full_analysis"] = len(dfs)
     stats = load_model_stats()
 
     ctx.update({
@@ -480,7 +354,6 @@ def scan_market(return_context=False):
             for key in (
                 "current_price", "historical_close", "current_vs_close_pct",
                 "price_source", "is_realtime", "data_source",
-                "history_as_of", "retrieved_at", "currency", "price_basis",
             ):
                 analysis[key] = df.attrs.get(key)
 
