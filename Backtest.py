@@ -64,15 +64,39 @@ def _load_one(symbol, period):
     os.makedirs(CACHE_DIR, exist_ok=True)
     path = os.path.join(CACHE_DIR, f"{symbol}_{period}.csv")
 
-    fresh = os.path.exists(path) and (time.time() - os.path.getmtime(path)) < CACHE_MAX_AGE_HOURS * 3600
-
+    meta_path = path + ".meta.json"
+    fresh = (os.path.exists(path) and os.path.exists(meta_path)
+             and (time.time() - os.path.getmtime(path)) < CACHE_MAX_AGE_HOURS * 3600)
+    raw = None
     if fresh:
-        raw = pd.read_csv(path, index_col=0, parse_dates=True)
-    else:
+        try:
+            with open(meta_path, encoding="utf-8") as f:
+                metadata = json.load(f)
+            candidate = pd.read_csv(path, index_col=0, parse_dates=True)
+            valid_metadata = (
+                isinstance(metadata, dict)
+                and metadata.get("validation_version") == 1
+                and metadata.get("symbol") == symbol
+                and metadata.get("currency") == "EGP"
+                and metadata.get("exchange") in ("CAI", "EGX")
+            )
+            valid_dates = (len(candidate) > 0
+                           and candidate.index[-1].date() == scanner.latest_expected_session())
+            if valid_metadata and valid_dates and scanner.data_quality_ok(candidate):
+                candidate.attrs.update(metadata)
+                raw = candidate
+        except (OSError, ValueError, TypeError, KeyError, IndexError):
+            raw = None
+    if raw is None:
+        # Legacy/corrupt caches are not trusted merely because their mtime is recent.
         raw = scanner.fetch_yahoo_history(symbol, period=period)
         if raw is None:
             return symbol, None
         raw.to_csv(path)
+        metadata = dict(raw.attrs)
+        metadata.update(validation_version=1, symbol=symbol)
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f)
 
     return symbol, calculate_indicators(raw)
 
