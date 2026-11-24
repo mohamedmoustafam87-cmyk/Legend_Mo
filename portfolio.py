@@ -184,3 +184,23 @@ def analyze_user_portfolio(ctx=None):
             continue
 
     return results
+
+
+def prepare_dated_portfolio(frames=None):
+    """Private, no-send arithmetic using the user-selected latest stored basis.
+
+    Supplied frames are keyed by ticker (with or without .CA). Missing symbols
+    remain unavailable. With no frames, fetch each selected symbol once through
+    the same dated Yahoo pipeline as the app; do not use legacy holding advice.
+    """
+    from portfolio_research import build_portfolio_snapshot
+    if frames is None:
+        frames = {}
+        for ticker in MY_PORTFOLIO:
+            try:
+                frame, _ = get_stock_data(ticker + '.CA', allow_research=True)
+                if frame is not None:frames[ticker] = frame
+            except Exception:
+                # Preserve the holding and missing-price state, not invented zero.
+                continue
+    return build_portfolio_snapshot(MY_PORTFOLIO, frames)

@@ -353,3 +353,9 @@ def send_portfolio_report(results):
     except Exception:
         print("Portfolio report failed. No credential values were logged.")
         return False
+
+
+def format_dated_portfolio_messages(snapshot):
+    """Private review output, no side effects or implicit delivery approval."""
+    from portfolio_research import format_private_portfolio
+    return format_private_portfolio(snapshot)
