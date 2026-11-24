@@ -32,7 +32,6 @@ if _missing_files:
 
 try:
     from scanner import (
-        fetch_mubasher_prices,
         get_stock_data,
         load_saved_context,
     )
@@ -677,10 +676,8 @@ def build_radar(analysis):
 
 @st.cache_data(ttl=300, show_spinner=False)
 def load_market_prices():
-    try:
-        return fetch_mubasher_prices()
-    except Exception:
-        return {}
+    # Yahoo-only reference mode. No secondary-provider quote lookup.
+    return {}
 
 
 @st.cache_data(ttl=600, show_spinner=False)

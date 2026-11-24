@@ -37,7 +37,6 @@ from ml import load_model_stats
 # ==========================================================
 
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/"
-MUBASHER_URL = "https://www.mubasher.info/api/1/market/stocks?country=eg"
 REQUEST_TIMEOUT = 15
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
@@ -83,28 +82,8 @@ def _get_json(url, params=None, retries=3):
 # ==========================================================
 
 def fetch_mubasher_prices():
-    try:
-        payload = _get_json(MUBASHER_URL, retries=2)
-        data = payload.get("data", [])
-
-        if not isinstance(data, list):
-            return {}
-
-        prices = {}
-        for item in data:
-            if not isinstance(item, dict):
-                continue
-            symbol = clean_symbol(item.get("symbol") or item.get("code") or item.get("ticker"))
-            price = safe_float(
-                item.get("price") or item.get("last") or item.get("lastPrice") or item.get("close")
-            )
-            if symbol and price is not None and price > 0:
-                prices[symbol] = price
-        return prices
-
-    except Exception as e:  # noqa: BLE001
-        print(f"⚠️ Mubasher price error: {e}")
-        return {}
+    """Compatibility no-op. Yahoo-only mode never queries another provider."""
+    return {}
 
 
 # ==========================================================
@@ -179,6 +158,10 @@ def history_metadata_ok(meta, symbol):
 
 
 def fetch_yahoo_history(symbol, period="2y", interval="1d", drop_partial=True):
+    # Existing analysis is daily only. Never relabel intraday bars as sessions.
+    if interval != "1d":
+        print("Data unavailable: intraday analysis is not supported by this daily loader")
+        return None
     try:
         payload = _get_json(
             YAHOO_CHART_URL + symbol,
@@ -196,6 +179,9 @@ def fetch_yahoo_history(symbol, period="2y", interval="1d", drop_partial=True):
 
         result = result[0]
         meta = result.get("meta") or {}
+        if meta.get("dataGranularity") != interval:
+            print(f"Data unavailable: provider candle timeframe mismatch for {symbol}")
+            return None
         if not history_metadata_ok(meta, symbol):
             print(f"Data unavailable: provider instrument metadata mismatch for {symbol}")
             return None
@@ -403,11 +389,8 @@ def scan_market(return_context=False):
 
     print("🔎 Starting market scan...")
 
-    mubasher_prices = fetch_mubasher_prices()
-    print(
-        f"📡 Mubasher prices loaded: {len(mubasher_prices)} stocks"
-        if mubasher_prices else "⚠️ Mubasher unavailable. Using Yahoo Last Close."
-    )
+    mubasher_prices = {}  # Legacy argument only, no secondary data source.
+    print("Yahoo-only daily reference mode; not a live quote or intraday feed.")
 
     universe = [s for s in EGX_STOCKS if s in set(SHARIA_EGX_STOCKS)]
     dfs = load_universe_frames(universe, mubasher_prices)
