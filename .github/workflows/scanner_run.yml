@@ -6,37 +6,40 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Keep true until destination and sending are approved'
+        description: 'Validation only, no source calls or messages'
         type: boolean
         default: true
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: egx-telegram-delivery
+  group: legend-private-report-journal
   cancel-in-progress: false
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
           cache: pip
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r requirements.txt 'cryptography>=43,<47'
       - name: Offline checks
         run: python -m unittest discover -s tests -v
-      - name: Safe validation without messages
-        if: vars.TELEGRAM_DELIVERY_ENABLED != 'true' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)
-        run: python main.py --dry-run
-      - name: Run approved Telegram delivery
-        if: vars.TELEGRAM_DELIVERY_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run)
+      - name: Safe validation without source calls or messages
+        if: vars.TELEGRAM_DELIVERY_ENABLED != 'true' || vars.SCHEDULED_DATED_REPORT_ENABLED != 'true' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)
+        run: python scheduled_delivery.py --dry-run
+      - name: Run explicitly enabled dated private operation
+        if: vars.TELEGRAM_DELIVERY_ENABLED == 'true' && vars.SCHEDULED_DATED_REPORT_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run)
         env:
+          TELEGRAM_DELIVERY_ENABLED: ${{ vars.TELEGRAM_DELIVERY_ENABLED }}
+          SCHEDULED_DATED_REPORT_ENABLED: ${{ vars.SCHEDULED_DATED_REPORT_ENABLED }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
-        run: python main.py
+          GH_TOKEN: ${{ github.token }}
+        run: python scheduled_delivery.py
