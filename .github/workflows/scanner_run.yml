@@ -2,7 +2,9 @@ name: EGX Bot Safe Delivery
 
 on:
   schedule:
-    - cron: '*/10 7-13 * * 0-4'
+    # Equivalent explicit minute list refreshes GitHub's scheduled-workflow actor.
+    # Same exact trigger times as */10. Original source-check slots are unchanged.
+    - cron: '0,10,20,30,40,50 7-13 * * 0-4'
   push:
     branches: [main]
     paths: [scheduled_operation_activation.json]
