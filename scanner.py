@@ -192,6 +192,19 @@ def fetch_yahoo_history(symbol, period="2y", interval="1d", drop_partial=True):
             return None
 
         quote = quote[0]
+        required_fields = ("open", "high", "low", "close", "volume")
+        if (not isinstance(timestamps, list)
+                or any(not isinstance(quote.get(k), list)
+                       or len(quote[k]) != len(timestamps) for k in required_fields)):
+            print(f"Data unavailable: provider candle arrays mismatch for {symbol}")
+            return None
+        if any(not isinstance(t, (int, float)) or isinstance(t, bool)
+               or not np.isfinite(t) for t in timestamps):
+            print(f"Data unavailable: invalid provider timestamp for {symbol}")
+            return None
+        if any(b <= a for a, b in zip(timestamps, timestamps[1:])):
+            print(f"Data unavailable: duplicate or unordered provider timestamps for {symbol}")
+            return None
 
         index = (
             pd.to_datetime(timestamps, unit="s", utc=True)
@@ -215,13 +228,15 @@ def fetch_yahoo_history(symbol, period="2y", interval="1d", drop_partial=True):
             return None
 
         df.index.name = "Date"
-        df = df[~df.index.duplicated(keep="last")]
+        if df.index.has_duplicates:
+            print(f"Data unavailable: multiple candles in daily session for {symbol}")
+            return None
 
         for col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-        df = df.dropna(subset=["Open", "High", "Low", "Close", "Volume"]).sort_index()
-
+        # Remove only an explicitly unfinished current-session candle. Missing
+        # completed candles remain invalid; never hide them with dropna/sorting.
         if drop_partial:
             df = drop_incomplete_bar(df)
 
