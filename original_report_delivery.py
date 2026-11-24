@@ -1,13 +1,12 @@
 """Operational adapter only. Uses owner's original report/analysis unchanged."""
-import os,sys,hashlib
+import os,sys,hashlib,json,urllib.error
 from datetime import datetime
 from private_journal import PrivateJournal
 
 
 def main():
     if '--dry-run' in sys.argv:
-        import app  # Not used by workflow; use compile checks instead.
-        return
+        print('No source calls or messages.');return
     destination=os.environ['ADMIN_CHAT_ID'].strip()
     journal=PrivateJournal(os.environ['TELEGRAM_TOKEN'].strip(),os.environ['GH_TOKEN'],os.environ['GITHUB_REPOSITORY'])
     journal.load();journal.assert_no_ambiguous();journal.verify_private(destination)
@@ -35,7 +34,22 @@ def main():
     messages=report.format_scanner_messages(opportunities,ctx)+report.format_portfolio_messages(holdings)
     if not messages or any(len(t.encode('utf-16-le'))//2>4096 for t in messages):raise ValueError('Original message exceeds Telegram size limit')
     for index,text in enumerate(messages):
-        response=journal.telegram('sendMessage',{'chat_id':destination,'text':text,'parse_mode':'Markdown'})
+        try:
+            response=journal.telegram('sendMessage',{'chat_id':destination,'text':text,'parse_mode':'Markdown'})
+        except urllib.error.HTTPError as error:
+            try: detail=json.loads(error.read())
+            except Exception: detail={}
+            description=str(detail.get('description','')).lower()
+            parse_rejection=(error.code==400 and detail.get('error_code')==400 and
+                             ('parse entities' in description or 'entity' in description))
+            if not parse_rejection:
+                journal.state[identity]['failure']={'http_status':error.code,'telegram_code':detail.get('error_code'),'part':index+1}
+                journal.persist()
+                raise
+            # Definite Telegram rejection, not an ambiguous network resend.
+            # Original code intended the same plain-text fallback.
+            plain=text.replace('*','').replace('`','').replace('_','')
+            response=journal.telegram('sendMessage',{'chat_id':destination,'text':plain})
         r=response.get('result',{})
         if not response.get('ok') or str(r.get('chat',{}).get('id'))!=destination or not r.get('message_id'):raise ValueError('Unconfirmed delivery')
         journal.state[identity]['receipts'].append({'part':index+1,'message_id':r['message_id'],'date':r.get('date')});journal.persist()
