@@ -1,0 +1,40 @@
+name: Reviewed Private Report Delivery
+
+on:
+  workflow_dispatch:
+    inputs:
+      encrypted_payload:
+        description: 'Encrypted reviewed report only, no plaintext financial details'
+        required: true
+        type: string
+      batch_id:
+        description: 'Stable reviewed batch identity'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: legend-private-report-journal
+  cancel-in-progress: false
+
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install encryption dependency
+        run: python -m pip install 'cryptography>=43,<47'
+      - name: Validate destination and deliver reviewed batch without retries
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
+          GH_TOKEN: ${{ github.token }}
+          ENCRYPTED_PAYLOAD: ${{ inputs.encrypted_payload }}
+          BATCH_ID: ${{ inputs.batch_id }}
+        run: python scoped_private_delivery.py
