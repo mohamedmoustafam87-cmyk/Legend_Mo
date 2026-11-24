@@ -57,12 +57,5 @@ def build_close_research(payload, symbol, now):
 
 
 def render_close_research(st, df, symbol):
-    from daily_research import render_research
-    st.markdown("""<style>
-    [data-testid="stText"] {white-space:pre-wrap; overflow-wrap:anywhere; direction:rtl; text-align:right; font-family:Arial,sans-serif; line-height:1.9; color:#e2e8f0;}
-    [data-testid="stText"] pre {white-space:pre-wrap; overflow-wrap:anywhere; font-family:inherit;}
-    [data-testid="stAlert"], [data-testid="stAlertContainer"] {background:#172333 !important; color:#f1f5f9 !important;}
-    [data-testid="stAlert"] p {color:#f1f5f9 !important;}
-    .block-container {padding-top:5rem !important;}
-    </style>""",unsafe_allow_html=True)
-    render_research(st,df,symbol)
+    from research_dashboard import render_dashboard
+    render_dashboard(st, df, symbol)
