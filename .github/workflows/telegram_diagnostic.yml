@@ -1,0 +1,99 @@
+name: Telegram Connection Diagnostic - No Messages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: telegram-no-send-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  diagnose-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check connection and private destination without sending
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
+        shell: python
+        run: |
+          import json
+          import os
+          import socket
+          import ssl
+          import sys
+          import urllib.request
+          import urllib.error
+
+          token = os.environ.get('TELEGRAM_TOKEN', '').strip()
+          destination = os.environ.get('ADMIN_CHAT_ID', '').strip()
+          if not token:
+              print('CONFIG: TELEGRAM_TOKEN is missing or empty. No message sent.')
+              sys.exit(1)
+          if not destination.isdecimal():
+              print('CONFIG: ADMIN_CHAT_ID must be a positive numeric private ID. No message sent.')
+              sys.exit(1)
+
+          def fail(stage, category):
+              print(stage + ': ' + category + '. No message sent.')
+              sys.exit(1)
+
+          def call(method, values):
+              # Only read-only Telegram methods are permitted here.
+              if method not in ('getMe', 'getChat'):
+                  fail('SAFETY', 'METHOD_NOT_ALLOWED')
+              request = urllib.request.Request(
+                  'https://api.telegram.org/bot' + token + '/' + method,
+                  data=json.dumps(values).encode('utf-8'),
+                  headers={'Content-Type': 'application/json'},
+                  method='POST',
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=20) as response:
+                      result = json.load(response)
+              except urllib.error.HTTPError as error:
+                  fail(method, 'HTTP_' + str(int(error.code)))
+              except (TimeoutError, socket.timeout):
+                  fail(method, 'TIMEOUT')
+              except ssl.SSLError:
+                  fail(method, 'TLS_ERROR')
+              except urllib.error.URLError as error:
+                  reason = error.reason
+                  if isinstance(reason, socket.gaierror):
+                      category = 'DNS_ERROR'
+                  elif isinstance(reason, (TimeoutError, socket.timeout)):
+                      category = 'TIMEOUT'
+                  elif isinstance(reason, ssl.SSLError):
+                      category = 'TLS_ERROR'
+                  else:
+                      category = 'NETWORK_ERROR'
+                  fail(method, category)
+              except (ValueError, UnicodeError):
+                  fail(method, 'INVALID_JSON_RESPONSE')
+              except Exception:
+                  fail(method, 'UNEXPECTED_ERROR')
+              if not isinstance(result, dict):
+                  fail(method, 'UNEXPECTED_RESPONSE_SHAPE')
+              if not result.get('ok'):
+                  code = result.get('error_code')
+                  category = 'API_' + str(code) if type(code) is int else 'API_REJECTED'
+                  fail(method, category)
+              return result.get('result')
+
+          identity = call('getMe', {})
+          if not isinstance(identity, dict) or identity.get('is_bot') is not True:
+              fail('getMe', 'BOT_IDENTITY_NOT_CONFIRMED')
+          print('getMe: OK - bot authentication confirmed; identity details not logged.')
+          chat = call('getChat', {'chat_id': destination})
+          if not isinstance(chat, dict):
+              fail('getChat', 'UNEXPECTED_RESPONSE_SHAPE')
+          if chat.get('type') != 'private':
+              fail('getChat', 'DESTINATION_NOT_PRIVATE')
+          if str(chat.get('id')) != destination:
+              fail('getChat', 'DESTINATION_ID_MISMATCH')
+          print('getChat: OK - configured private destination confirmed.')
+          print('Diagnostic complete. No send method was called. No message sent.')
