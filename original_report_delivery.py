@@ -9,8 +9,14 @@ def main():
         print('No source calls or messages.');return
     destination=os.environ['ADMIN_CHAT_ID'].strip()
     journal=PrivateJournal(os.environ['TELEGRAM_TOKEN'].strip(),os.environ['GH_TOKEN'],os.environ['GITHUB_REPOSITORY'])
-    journal.load();journal.assert_no_ambiguous();journal.verify_private(destination)
-    identity='original-report:owner-request-2026-11-24T15:37:02-Cairo'
+    journal.load();journal.verify_private(destination)
+    original_identity='original-report:owner-request-2026-11-24T15:37:02-Cairo'
+    prior=journal.state.get(original_identity,{})
+    if prior.get('status')=='claimed' and not prior.get('receipts'):
+        prior.update(status='reconciled-not-received',reconciliation='Owner WhatsApp 2026-11-24T15:45:32 Cairo confirmed nothing arrived')
+        journal.persist()
+    journal.assert_no_ambiguous()
+    identity=original_identity+':receipt-confirmed-retry'
     if journal.state.get(identity,{}).get('status')=='sent':
         print('Requested original report already sent; skipped.');return
     if identity in journal.state:raise ValueError('Ambiguous original request')
