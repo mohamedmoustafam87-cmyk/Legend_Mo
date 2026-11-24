@@ -15,6 +15,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
+      - name: Compare public Telegram transport without credentials
+        shell: bash
+        run: |
+          set +e
+          for family in 4 6; do
+            echo "Public Telegram IPv${family} transport (no bot token)"
+            curl "-${family}" --silent --output /dev/null \
+              --connect-timeout 10 --max-time 15 \
+              --write-out 'http=%{http_code} connect=%{time_connect}s tls=%{time_appconnect}s total=%{time_total}s\n' \
+              https://api.telegram.org/
+            result=$?
+            echo "curl_exit=${result}"
+          done
+          exit 0
       - name: Check connection and private destination without sending
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
