@@ -23,8 +23,48 @@ CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 
-def load_symbol(symbol, max_age_hours=20):
-    path = os.path.join(CACHE_DIR, symbol.replace(".", "_") + ".pkl")
+def fetch_yahoo_adjusted(symbol):
+    """OHLC معدّل بعامل adjclose/close من Yahoo (بحث فقط — الإنتاج يبقى خامًا)."""
+    import requests as _rq
+    try:
+        resp = _rq.get(
+            "https://query1.finance.yahoo.com/v8/finance/chart/" + symbol,
+            params={"range": "2y", "interval": "1d",
+                    "events": "history", "includeAdjustedClose": "true"},
+            headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
+        if resp.status_code != 200:
+            return None
+        result = (resp.json().get("chart", {}).get("result") or [None])[0]
+        if not result:
+            return None
+        ts = result.get("timestamp")
+        q = (result.get("indicators", {}).get("quote") or [{}])[0]
+        adj = (result.get("indicators", {}).get("adjclose") or [{}])[0].get("adjclose")
+        if not ts or not q or not adj:
+            return None
+        df = pd.DataFrame({"Open": q.get("open"), "High": q.get("high"),
+                           "Low": q.get("low"), "Close": q.get("close"),
+                           "Volume": q.get("volume"), "Adj": adj},
+                          index=pd.to_datetime(ts, unit="s"))
+        for c in ["Open", "High", "Low", "Close", "Volume", "Adj"]:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+        df.dropna(subset=["Open", "High", "Low", "Close", "Adj"], inplace=True)
+        df = df[~df.index.duplicated(keep="last")].sort_index()
+        factor = df["Adj"] / df["Close"]
+        for c in ["Open", "High", "Low", "Close"]:
+            df[c] = df[c] * factor
+        df = df[["Open", "High", "Low", "Close", "Volume"]]
+        df.index.name = "Date"
+        if len(df) < 220:
+            return None
+        return df
+    except Exception:
+        return None
+
+
+def load_symbol(symbol, max_age_hours=20, adjusted=False):
+    suffix = "_adj.pkl" if adjusted else ".pkl"
+    path = os.path.join(CACHE_DIR, symbol.replace(".", "_") + suffix)
     if os.path.exists(path):
         age = time.time() - os.path.getmtime(path)
         if age < max_age_hours * 3600:
@@ -32,7 +72,7 @@ def load_symbol(symbol, max_age_hours=20):
                 return pd.read_pickle(path)
             except Exception:
                 pass
-    df = fetch_yahoo_history(symbol)
+    df = fetch_yahoo_adjusted(symbol) if adjusted else fetch_yahoo_history(symbol)
     if df is not None and not df.empty:
         df.to_pickle(path)
     return df
@@ -43,6 +83,7 @@ def main():
     out_name = "backtest_results.json"
     variants = ("v1_baseline", "v2")
     ema_max_dist = None
+    adjusted = False
     for a in sys.argv[1:]:
         if a.startswith("--out="):
             out_name = a.split("=", 1)[1]
@@ -50,6 +91,8 @@ def main():
             variants = tuple(a.split("=", 1)[1].split(","))
         elif a.startswith("--ema-dist="):
             ema_max_dist = float(a.split("=", 1)[1])
+        elif a == "--adjusted":
+            adjusted = True
     symbols = args or None
     if not symbols:
         from config import EGX_STOCKS
@@ -58,7 +101,7 @@ def main():
     all_records = []
     failed = []
     for i, sym in enumerate(symbols, 1):
-        df = load_symbol(sym)
+        df = load_symbol(sym, adjusted=adjusted)
         if df is None or df.empty:
             failed.append(sym)
             continue

@@ -44,11 +44,14 @@ def simulate_portfolio(records, capital=INITIAL_CAPITAL, scenario=SCENARIO_STAND
         open_positions = still_open
 
         shares = int(r["shares"])
-        value = shares * float(r["entry_price"])
-        if value > cash or shares <= 0:
+        entry = float(r["entry_price"])
+        # الحجم يُحدُّ بالنقد المتاح: يُخفَض لما يكفي النقد، ويُتخطى إن لم يكفِ لسهم واحد
+        capped = min(shares, int(cash / entry))
+        if capped <= 0 or shares <= 0:
             skipped_cash += 1
             continue
-        # أعد حساب الحجم إذا كان النقد أقل من قيمة الصفقة المخططة
+        shares = capped
+        value = shares * entry
         cash -= value
         fees = round_trip_fees(value, shares * float(r["exit_price"]), scenario)
         net_pl = shares * (float(r["exit_price"]) - float(r["entry_price"])) - fees

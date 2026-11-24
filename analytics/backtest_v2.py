@@ -54,7 +54,13 @@ def _trade_outcome(df_after, entry_idx, stop, tp1, horizon_end, entry_price=None
         if entry_idx + i > horizon_end:
             break
         row = df_after.iloc[i]
+        op = float(row["Open"])
         hi, lo, cl = float(row["High"]), float(row["Low"]), float(row["Close"])
+        # الفجوات تُنفَّذ بسعر الافتتاح المتاح لا بسعر المستوى
+        if op <= stop:
+            return OUTCOME_STOP, op, df_after.index[i], i + 1
+        if op >= tp1:
+            return OUTCOME_TP1, op, df_after.index[i], i + 1
         hit_stop = lo <= stop
         hit_tp1 = hi >= tp1
         if hit_stop and hit_tp1:
