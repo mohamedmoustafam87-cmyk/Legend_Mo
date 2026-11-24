@@ -1,54 +1,36 @@
 import os
-import re
 from zoneinfo import ZoneInfo
 
-_BASE = os.path.dirname(os.path.abspath(__file__))
-
 # ==========================================================
-# Telegram (لا يتم رفع خطأ وقت الاستيراد - يتحقق منه البوت فقط)
+# Telegram Configuration
 # ==========================================================
 
-# تحذير: القيم هنا مكتوبة داخل الكود بطلب صاحب المشروع.
-# لو الريبو Public أي حد يقدر يشوف التوكن ويتحكم في البوت.
-# الأفضل: ريبو Private، أو رجّع القراءة من GitHub Secrets (os.getenv).
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
-ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "").strip()
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
 
+if not TELEGRAM_TOKEN:
+    raise ValueError("TELEGRAM_TOKEN is not set")
 
-def require_telegram():
-    if not TELEGRAM_TOKEN:
-        raise ValueError("TELEGRAM_TOKEN is not set")
-    if not ADMIN_CHAT_ID:
-        raise ValueError("ADMIN_CHAT_ID is not set")
-
-    # فحص شكل التوكن (بدون طباعته): الجزء بعد ":" عادةً 35 حرف
-    if not re.fullmatch(r"\d{8,10}:[A-Za-z0-9_-]{35}", str(TELEGRAM_TOKEN)):
-        secret_len = len(str(TELEGRAM_TOKEN).split(":")[-1])
-        print(
-            f"⚠️ شكل TELEGRAM_TOKEN غير معتاد (طول الجزء بعد ':' = {secret_len}، المعتاد 35). "
-            "لو تيليجرام رد بـ Unauthorized أعد نسخ التوكن كاملاً من BotFather."
-        )
-
-    if not str(ADMIN_CHAT_ID).lstrip("-").isdigit():
-        print("⚠️ ADMIN_CHAT_ID لازم يكون رقم (للجروب بيبدأ بـ -).")
+if not ADMIN_CHAT_ID:
+    raise ValueError("ADMIN_CHAT_ID is not set")
 
 
 # ==========================================================
-# Trading / Risk
+# Trading Configuration
 # ==========================================================
 
 TOTAL_CAPITAL = 100000
-RISK_PER_TRADE = 0.01            # أقصى خسارة للصفقة = 1% من رأس المال
-MAX_POSITION_PCT = 0.20          # أقصى حجم للصفقة الواحدة = 20% من رأس المال
-MIN_SCORE_THRESHOLD = 60         # يُستخدم فقط عند غياب نتائج الـ backtest
-MAX_REPORT_STOCKS = 5
 
-# مضاعف حجم الصفقة حسب حالة السوق (اتساع السوق Breadth)
-REGIME_SIZE_MULT = {"low": 0.5, "mid": 0.75, "high": 1.0}
+# أقصى مخاطرة في الصفقة الواحدة = 1%
+RISK_PER_TRADE = 0.01
+
+# أقل Score لإظهار السهم
+MIN_SCORE_THRESHOLD = 60
 
 
 # ==========================================================
 # EGX STOCK UNIVERSE
+# جميع الأسهم الموجودة في قائمة EGX الحالية.
 # ==========================================================
 
 EGX_STOCKS = [
@@ -78,43 +60,23 @@ EGX_STOCKS = [
 ]
 
 
-def _load_symbols_file(name):
-    path = os.path.join(_BASE, name)
-    if not os.path.exists(path):
-        return None
-    out = set()
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            s = line.split("#")[0].strip().upper()
-            if s:
-                out.add(s if s.endswith(".CA") else s + ".CA")
-    return out or None
+# ==========================================================
+# SHARIA FILTER (Disabled / All Stocks Included)
+# ==========================================================
+
+SHARIA_EGX_STOCKS = EGX_STOCKS
 
 
 # ==========================================================
-# SHARIA FILTER
-# ضع قائمتك المعتمدة في ملف sharia_stocks.txt (رمز في كل سطر).
-# بدون الملف الفلتر غير مفعّل (القائمة الحالية فيها بنوك تقليدية).
-# ==========================================================
-
-_sharia = _load_symbols_file("sharia_stocks.txt")
-SHARIA_FILTER_ACTIVE = _sharia is not None
-SHARIA_EGX_STOCKS = (
-    [s for s in EGX_STOCKS if s in _sharia] if _sharia else list(EGX_STOCKS)
-)
-
-
-# ==========================================================
-# Liquidity
+# Liquidity Configuration
 # ==========================================================
 
 MIN_AVG_DAILY_VALUE = 1_000_000
 MIN_AVG_VOLUME = 10_000
-MIN_ACTIVE_DAYS = 18             # أيام فيها تداول من آخر 20 جلسة
 
 
 # ==========================================================
-# Technical Indicators
+# Technical Indicators Configuration
 # ==========================================================
 
 RSI_PERIOD = 14
@@ -128,19 +90,33 @@ MACD_SLOW = 26
 MACD_SIGNAL = 9
 VOLUME_MA_PERIOD = 20
 SUPPORT_RESISTANCE_PERIOD = 20
-MIN_HISTORY_ROWS = 220
 
 
 # ==========================================================
-# Horizon / Entry / Risk (كما هي)
+# Investment Horizon
 # ==========================================================
 
 ONE_MONTH_SESSIONS = 21
 TWO_MONTH_SESSIONS = 42
 
+
+# ==========================================================
+# Entry Configuration (Smart & Realistic Filters)
+# ==========================================================
+
+# أقصى مسافة مسموح بها عن المتوسط لعدم الدخول في قمم متصححة
 MAX_DISTANCE_FROM_EMA20 = 5.0
+
+# منع التشبع الشرائي الخطير: ألا يتجاوز مؤشر RSI هذا الرقم لنتجنب فخ التصحيح المفاجئ
 MAX_ALLOWABLE_RSI = 72.0
+
+# نطاق الدخول القريب من السعر الحالي
 MAX_ENTRY_DISTANCE_PERCENT = 2.5
+
+
+# ==========================================================
+# Risk Management
+# ==========================================================
 
 ATR_STOP_MULTIPLIER = 2.0
 SUPPORT_ATR_BUFFER = 0.5
@@ -149,42 +125,18 @@ TP2_R_MULTIPLE = 3.0
 
 
 # ==========================================================
-# Schedule / Trading calendar
+# Report Scheduling (بتوقيت القاهرة - يتعامل تلقائيًا مع التوقيت الصيفي)
 # ==========================================================
 
-TIMEZONE_NAME = "Africa/Cairo"
-TIMEZONE = ZoneInfo(TIMEZONE_NAME)
+TIMEZONE = ZoneInfo("Africa/Cairo")
 
-REPORT_TIMES = [(10, 30), (12, 30), (14, 30), (15, 0)]
+# مواعيد إرسال التقرير (ساعة, دقيقة) بتوقيت القاهرة المحلي
+REPORT_TIMES = [
+    (10, 30),
+    (12, 30),
+    (14, 30),
+    (15, 0),
+]
+
+# هامش السماح بالدقائق - لو الـ workflow اتأخر عن الميعاد المحدد
 REPORT_TIME_TOLERANCE_MINUTES = 5
-
-# أيام التداول: الأحد..الخميس (Python: Monday=0 ... Sunday=6)
-TRADING_WEEKDAYS = {6, 0, 1, 2, 3}
-
-# الجلسة تُعتبر مكتملة بعد (إغلاق + هامش)
-MARKET_CLOSE = (14, 30)
-BAR_COMPLETE_BUFFER_MIN = 20
-
-# إجازات البورصة: ضعها في egx_holidays.txt (YYYY-MM-DD في كل سطر)
-EGX_HOLIDAYS = set()
-_hol = os.path.join(_BASE, "egx_holidays.txt")
-if os.path.exists(_hol):
-    with open(_hol, encoding="utf-8") as _f:
-        for _line in _f:
-            _d = _line.split("#")[0].strip()
-            if _d:
-                EGX_HOLIDAYS.add(_d)
-
-
-# ==========================================================
-# Backtest / Model
-# ==========================================================
-
-ROUND_TRIP_COST_PCT = 0.5        # عمولات + ضرائب + انزلاق (عدّلها حسب شركتك)
-MODEL_STATS_FILE = os.getenv(
-    "MODEL_STATS_FILE", os.path.join(_BASE, "model_stats.json")
-)
-CONTEXT_FILE = os.getenv(
-    "CONTEXT_FILE", os.path.join(_BASE, "market_context.json")
-)
-MAX_WORKERS = 6
