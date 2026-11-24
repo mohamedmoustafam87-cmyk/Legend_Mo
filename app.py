@@ -1043,8 +1043,7 @@ with col1:
 <div class="lm-card" style="height:140px;">
     <div class="score-label">تقييم LENS الشامل</div>
     <div class="score-number {score_class}">{f"{score:.0f}" if score_available else "غير متاح"}</div>
-    <div style="color:#737B85; font-size:11px; margin-top:7px;">{f"/ {score_max:.0f} • {score_text(score)}" if score_available else "لا يوجد تقييم حقيقي"}</div>
-    {f'<div style="color:#E8B54A; font-size:11px; margin-top:5px;">أقل من حد الترشيح 60 — للمتابعة فقط</div>' if (score_available and below_threshold) else ""}
+    <div style="color:#737B85; font-size:11px; margin-top:7px;">{f"/ {score_max:.0f} • {score_text(score)}" if score_available else "لا يوجد تقييم حقيقي"}</div>{f'<div style="color:#E8B54A; font-size:11px; margin-top:5px;">أقل من حد الترشيح 60 - للمتابعة فقط</div>' if (score_available and below_threshold) else ""}
     <div class="progress-bg"><div class="progress-fill" style="width:{(score / score_max * 100) if (score_available and score_max > 0) else 0:.0f}%;"></div></div>
 </div>
 """,
