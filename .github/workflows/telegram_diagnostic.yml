@@ -43,6 +43,25 @@ jobs:
           import urllib.request
           import urllib.error
 
+          # Compare the same Python transport without any bot credential first.
+          original_getaddrinfo = socket.getaddrinfo
+          def ipv4_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+              return original_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+
+          def public_probe(label):
+              try:
+                  with urllib.request.urlopen('https://api.telegram.org/', timeout=10) as response:
+                      print(label + ': HTTP_' + str(response.status))
+              except urllib.error.HTTPError as error:
+                  print(label + ': HTTP_' + str(error.code))
+              except Exception as error:
+                  print(label + ': ' + type(error).__name__)
+
+          public_probe('Python public root default')
+          socket.getaddrinfo = ipv4_getaddrinfo
+          public_probe('Python public root IPv4-only')
+          print('Read-only bot checks below use IPv4-only DNS results.')
+
           token = os.environ.get('TELEGRAM_TOKEN', '').strip()
           destination = os.environ.get('ADMIN_CHAT_ID', '').strip()
           if not token:
