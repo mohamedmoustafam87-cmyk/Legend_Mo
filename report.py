@@ -359,3 +359,9 @@ def format_dated_portfolio_messages(snapshot):
     """Private review output, no side effects or implicit delivery approval."""
     from portfolio_research import format_private_portfolio
     return format_private_portfolio(snapshot)
+
+
+def format_readable_private_report(records, portfolio_snapshot=None):
+    """Meaning-first Telegram layout only, no app/data/send-state mutation."""
+    from telegram_presentation import compact_messages
+    return compact_messages(records, portfolio_snapshot)
