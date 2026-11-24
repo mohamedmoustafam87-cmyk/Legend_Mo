@@ -34,8 +34,15 @@ try:
     from scanner import (
         fetch_mubasher_prices,
         get_stock_data,
-        load_saved_context,
     )
+
+    # الـ scanner الأصلي المسترجع مفيهوش load_saved_context ومفيش ملف سياق بيتكتب،
+    # فبنرجع None (نفس سلوك الدالة القديمة لما الملف يكون غير موجود).
+    try:
+        from scanner import load_saved_context
+    except ImportError:
+        def load_saved_context(*args, **kwargs):
+            return None
 
     from indicators import calculate_indicators
     from strategy import evaluate_stock_strategy
