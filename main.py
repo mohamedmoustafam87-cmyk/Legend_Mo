@@ -76,7 +76,7 @@ def main():
         # عند التشغيل: رسالة فورية تثبت إن التوكن والـ ID شغالين قبل السكان الطويل
         if not safe_send_message(
             ADMIN_CHAT_ID,
-            "🤖 *EGX Bot:* بدأ تشغيل البوت — جاري فحص الأسهم وإرسال التقرير والتوصيات.",
+            "🤖 *EGX Bot:* بدأ فحص Yahoo؛ أي أسعار تظهر بتاريخها، والنتيجة حسب البيانات المتاحة.",
         ):
             print("❌ تيليجرام رفض رسالة الاختبار: راجع TELEGRAM_TOKEN و ADMIN_CHAT_ID في config.py "
                   "(Unauthorized = توكن غلط | chat not found = ID غلط أو لم تضغط Start).")

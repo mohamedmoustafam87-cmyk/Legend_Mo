@@ -173,7 +173,7 @@ def format_stock_block(item):
     change = safe_float(item.get("current_vs_close_pct"))
     realtime = item.get("is_realtime", False)
 
-    price_status = "🟡 آخر إغلاق مكتمل متحقق منه (ليس سعراً لحظياً)"
+    price_status = "🟡 آخر إغلاق تاريخي من Yahoo (ليس سعراً لحظياً)"
     as_of = item.get("history_as_of", "غير متاح")
 
     block = (
@@ -218,7 +218,28 @@ def format_stock_block(item):
     return block + "\n━━━━━━━━━━━━━━━━━━\n\n"
 
 
+def format_close_research_block(item):
+    gaps = item.get("gap_dates") or []
+    return (
+        f"{item['ticker']} | Yahoo Finance | EGP\n"
+        f"آخر إغلاق تاريخي بتاريخ {item['history_as_of']}: {num(item['Close'])} EGP\n"
+        f"EMA20 {num(item['EMA20'])} | EMA50 {num(item['EMA50'])} | MA200 {num(item['MA200'])}\n"
+        f"RSI14 {num(item['RSI14'])}\n"
+        f"الحساب على {item['observed_closes']} إغلاقًا متاحًا، وليس جلسات متصلة مؤكدة.\n"
+        f"صفوف إغلاق مفقودة: {len(gaps)}. التواريخ: {', '.join(gaps) or 'لا توجد صفوف فارغة مرصودة'}\n"
+        f"وصف الأداة من المصدر (غير معتمد هنا): {item.get('instrument_type', 'unknown')}\n"
+        "لم نتحقق من تقويم السوق أو أسعار البورصة بشكل مستقل؛ قد توجد تواريخ غائبة أخرى.\n"
+        "عرض يومي محدود، لا سعر لحظي ولا توصية أو نماذج شموع أو أهداف أو وقف خسارة.\n\n"
+    )
+
+
 def format_scanner_messages(opportunities, ctx=None):
+    ctx = ctx or {}
+    research = ctx.get("close_research") or []
+    limited = _chunk([format_close_research_block(i) for i in research],
+        "عرض تاريخي محدود من Yahoo Finance\nالأسعار مؤرخة وليست أسعار الجلسة الحالية.\n\n") if research else []
+    if research and not ctx.get("n_full_analysis") and not opportunities:
+        return limited
     header = _context_header(ctx)
 
     if not opportunities:
@@ -231,11 +252,11 @@ def format_scanner_messages(opportunities, ctx=None):
             body += "\n👀 *مراقبة (بدون إعداد نشط):*\n" + "\n".join(
                 f"• {w['ticker']} — Score {w['score']}" for w in watch
             ) + "\n"
-        return [header + body + "\n" + DISCLAIMER]
+        return [header + body + "\n" + DISCLAIMER] + limited
 
     messages = _chunk([format_stock_block(i) for i in opportunities], header)
     messages[-1] += DISCLAIMER
-    return messages
+    return messages + limited
 
 
 def send_scanner_report(opportunities, ctx=None):

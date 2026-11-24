@@ -249,15 +249,15 @@ def validate_yahoo_history(payload, symbol, interval="1d", drop_partial=True):
         if df.index[-1].date() > now.date():
             print(f"Data unavailable: future session for {symbol}")
             return None
-        if df.index[-1].date() < latest_expected_session(now):
-            print(f"Data unavailable: latest complete session is missing for {symbol}")
-            return None
+        # Delay alone does not invalidate dated historical data. Never call it live.
+        delay_warning = df.index[-1].date() < latest_expected_session(now)
 
         if not data_quality_ok(df):
             print(f"⚠️ Data quality issue (قفزة غير منطقية): {symbol}")
             return None
 
         df.attrs.update({
+            "session_delay_warning": delay_warning,
             "history_as_of": df.index[-1].date().isoformat(),
             "retrieved_at": now.isoformat(),
             "currency": meta["currency"],
@@ -377,7 +377,10 @@ def _load_one(symbol, mubasher_prices):
     try:
         time.sleep(random.random() * 0.3)
 
-        df, data_source = get_stock_data(symbol, mubasher_prices)
+        df, data_source = get_stock_data(symbol, mubasher_prices, allow_research=True)
+
+        if df is not None and df.attrs.get("mode") == "close_research":
+            return symbol, df
 
         if df is None or not validate_current_price(df):
             return symbol, None
@@ -411,6 +414,17 @@ def load_universe_frames(symbols, mubasher_prices):
     return dfs
 
 
+def close_research_record(symbol, frame):
+    last = frame.iloc[-1]
+    return {"ticker": symbol, "mode": "close_research",
+            "history_as_of": frame.attrs["history_as_of"], "currency": "EGP",
+            "gap_dates": frame.attrs["gap_dates"],
+            "instrument_type": frame.attrs["instrument_type"],
+            "observed_closes": len(frame),
+            **{k: (None if pd.isna(last[k]) else float(last[k]))
+               for k in ("Close", "EMA20", "EMA50", "MA200", "RSI14")}}
+
+
 def scan_market(return_context=False):
 
     print("🔎 Starting market scan...")
@@ -420,11 +434,18 @@ def scan_market(return_context=False):
 
     universe = [s for s in EGX_STOCKS if s in set(SHARIA_EGX_STOCKS)]
     dfs = load_universe_frames(universe, mubasher_prices)
-    print(f"📈 Tradable stocks loaded: {len(dfs)} / {len(universe)}")
+    print(f"📈 Yahoo histories loaded: {len(dfs)} / {len(universe)}")
 
-    if not dfs:
-        raise RuntimeError("No validated market data; no market report should be sent")
-    ctx = market_context(dfs)
+    research = []
+    for symbol, frame in list(dfs.items()):
+        if frame.attrs.get("mode") == "close_research":
+            research.append(close_research_record(symbol, frame))
+            del dfs[symbol]
+    if not dfs and not research:
+        raise RuntimeError("No usable Yahoo closes; no prices will be invented")
+    ctx = market_context(dfs) if dfs else {}
+    ctx["close_research"] = research
+    ctx["n_full_analysis"] = len(dfs)
     stats = load_model_stats()
 
     ctx.update({
