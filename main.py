@@ -71,6 +71,9 @@ def main():
         return
 
     try:
+        if os.getenv("FULL_DATED_REPORT_APPROVED") != "true":
+            print("Dated full report awaiting reviewed-content approval; no scan or Telegram send.")
+            return
         require_telegram()
 
         # عند التشغيل: رسالة فورية تثبت إن التوكن والـ ID شغالين قبل السكان الطويل
@@ -89,7 +92,9 @@ def main():
         scanner_ok = send_scanner_report(opportunities, ctx)
 
         print("💼 Preparing portfolio report...")
-        portfolio_ok = send_portfolio_report(analyze_user_portfolio(ctx))
+        # Dated research already has a portfolio section explaining the missing
+        # confirmed basis. Do not send hardcoded holdings as current ownership.
+        portfolio_ok = True if ctx.get("close_research") else send_portfolio_report(analyze_user_portfolio(ctx))
 
         if scanner_ok and portfolio_ok:
             print("✅ تم الانتهاء من إرسال جميع التقارير والتوصيات بنجاح.")

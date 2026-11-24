@@ -298,13 +298,11 @@ def get_stock_data(symbol, mubasher_prices=None, allow_research=False):
     symbol = str(symbol).upper().strip()
     if allow_research:
         payload = _get_json(YAHOO_CHART_URL + symbol, params={"range": "2y", "interval": "1d", "events": "history", "includeAdjustedClose": "true"})
-        df = validate_yahoo_history(payload, symbol)
-        if df is None:
-            from close_research import build_close_research
-            research = build_close_research(payload, symbol, datetime.now(TIMEZONE))
-            if research is not None:
-                return research, "Yahoo limited daily research"
-            return None, yahoo_response_diagnostic(payload, symbol)
+        from close_research import build_close_research
+        research = build_close_research(payload, symbol, datetime.now(TIMEZONE))
+        if research is not None:
+            return research, "Yahoo dated daily research"
+        return None, yahoo_response_diagnostic(payload, symbol)
     else:
         df = fetch_yahoo_history(symbol)
 
@@ -433,16 +431,8 @@ def load_universe_frames(symbols, mubasher_prices):
 
 
 def close_research_record(symbol, frame):
-    last = frame.iloc[-1]
-    return {"ticker": symbol, "mode": "close_research",
-            "history_as_of": frame.attrs["history_as_of"], "currency": "EGP",
-            "selected_open": frame.attrs.get("selected_open"),
-            "selected_bar_ohlc_consistent": frame.attrs.get("selected_bar_ohlc_consistent", False),
-            "gap_dates": frame.attrs["gap_dates"],
-            "instrument_type": frame.attrs["instrument_type"],
-            "observed_closes": len(frame),
-            **{k: (None if pd.isna(last[k]) else float(last[k]))
-               for k in ("Close", "EMA20", "EMA50", "MA200", "RSI14")}}
+    from daily_research import research_record
+    return research_record(symbol, frame)
 
 
 def scan_market(return_context=False):

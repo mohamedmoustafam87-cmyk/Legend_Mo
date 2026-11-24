@@ -73,7 +73,7 @@ def _pct(a, b):
 # Main Indicators
 # ==========================================================
 
-def calculate_indicators(df):
+def calculate_indicators(df, require_open=True):
 
     if df is None or df.empty:
         return None
@@ -88,7 +88,7 @@ def calculate_indicators(df):
             return None
         df[col] = safe_numeric(df[col])
 
-    df = df.dropna(subset=ohlcv)
+    df = df.dropna(subset=ohlcv if require_open else ["High", "Low", "Close", "Volume"])
 
     if len(df) < MIN_HISTORY_ROWS:
         return None
@@ -250,6 +250,15 @@ def calculate_indicators(df):
     df["Bullish_Engulfing"] = (
         (prev_close < prev_open) & (c > o) & (o <= prev_close) & (c >= prev_open)
     )
+
+    if not require_open:
+        # Unknown Open must remain unknown, never False-as-a-negative signal.
+        valid_open = o.notna()
+        for key in ("Candle_Body_Pct", "Upper_Shadow_Pct", "Lower_Shadow_Pct", "Gap_Pct"):
+            df[key] = df[key].where(valid_open)
+        for key in ("Bullish_Candle", "Bearish_Candle", "Hammer", "Strong_Bullish_Candle"):
+            df[key] = df[key].astype("boolean").where(valid_open, pd.NA)
+        df["Bullish_Engulfing"] = df["Bullish_Engulfing"].astype("boolean").where(valid_open & valid_open.shift(1, fill_value=False), pd.NA)
 
     # ---------------- Trailing exits ----------------
     df["High_22"] = h.rolling(22).max()

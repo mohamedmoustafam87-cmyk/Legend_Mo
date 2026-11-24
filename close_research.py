@@ -50,36 +50,19 @@ def build_close_research(payload, symbol, now):
         good.attrs.update(mode='close_research',history_as_of=good.index[-1].date().isoformat(),
                           gap_dates=gaps,instrument_type=str(m.get('instrumentType','unknown')),
                           retrieved_at=now.isoformat(),age_days=(now.date()-good.index[-1].date()).days)
-        return good
+        from daily_research import enrich_history
+        all_dates=pd.to_datetime(ts,unit='s',utc=True).tz_convert(TIMEZONE_NAME).tz_localize(None).normalize()
+        return enrich_history(good,q,all_dates)
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return None
 
 
 def render_close_research(st, df, symbol):
-    import plotly.graph_objects as go
+    from daily_research import render_research
     st.markdown("""<style>
-    [data-testid="stMetricValue"], [data-testid="stMetricLabel"],
-    [data-testid="stCaptionContainer"] {color:#e2e8f0 !important;}
+    [data-testid="stText"] {white-space:pre-wrap; overflow-wrap:anywhere; direction:rtl; text-align:right; font-family:Arial,sans-serif; line-height:1.9; color:#e2e8f0;}
+    [data-testid="stText"] pre {white-space:pre-wrap; overflow-wrap:anywhere; font-family:inherit;}
     [data-testid="stAlert"], [data-testid="stAlertContainer"] {background:#172333 !important; color:#f1f5f9 !important;}
     [data-testid="stAlert"] p {color:#f1f5f9 !important;}
     .block-container {padding-top:5rem !important;}
-    </style>""", unsafe_allow_html=True)
-    st.subheader('عرض تاريخي محدود | '+symbol)
-    st.warning('التحليل الكامل غير متاح. هذا عرض إغلاق يومي فقط، وليس توصية شراء أو بيع أو سعرًا داخل الجلسة.')
-    st.caption('Yahoo Finance | EGP | آخر إغلاق: '+df.attrs['history_as_of']+' | عمر آخر إغلاق بالأيام: '+str(df.attrs['age_days']))
-    st.info('أسعار المصدر لم تُراجع بشكل مستقل. لم تجتز البيانات فحوص التحليل الكامل؛ لا نعتبر الإغلاق مؤكدًا من البورصة. لم نغيّر الأسعار ولم نفترض أن الفتح هو إغلاق أمس. لا توجد شموع أو أهداف أو وقف خسارة أو درجة ثقة هنا.')
-    gaps=df.attrs['gap_dates']
-    st.warning('الحسابات على الإغلاقات المتاحة فقط، وليست جلسات متصلة مؤكدة. صفوف إغلاق مفقودة: '+str(len(gaps))+(' | التواريخ: '+', '.join(gaps) if gaps else '')+'. لم نتحقق من تقويم السوق، وقد توجد تواريخ غائبة أخرى. لا تعويض للأسعار المفقودة.')
-    st.caption('وصف الأداة من Yahoo: '+df.attrs['instrument_type']+' | إغلاقات متاحة: '+str(len(df))+' | ليست عائدًا كليًا معدلًا بالتوزيعات. لا إثبات لأداء استراتيجية.')
-    selected_open=df.attrs.get('selected_open')
-    st.metric('Open EGP | '+df.attrs['history_as_of'], 'غير متاح' if selected_open is None else f'{selected_open:.2f}')
-    st.caption('الفتح والإغلاق لنفس التاريخ فقط. فتح غير متاح يعني أن شمعة هذا التاريخ لم تجتز فحص OHLC؛ لا نستبدلها بيوم أقدم. شمعة اليوم لا تُعتمد كنهائية حتى يتأكد اكتمالها؛ حاليًا نعرض جلسة سابقة فقط.')
-    st.caption('اتساق شمعة واحدة لا يثبت صحة تاريخ الشموع أو يفعّل نماذج متعددة الجلسات.')
-    cols=st.columns(5);last=df.iloc[-1]
-    for col,key,label in zip(cols,['Close','EMA20','EMA50','MA200','RSI14'],['Close EGP','EMA20 EGP','EMA50 EGP','MA200 EGP','RSI14']):
-        value=last[key];col.metric(label,'غير متاح' if pd.isna(value) else f'{value:.2f}')
-    st.caption('EMA20/50 وMA200: عدد الإغلاقات المتاحة. RSI14: تسوية Wilder على الإغلاقات المتاحة؛ القيم غير الكافية لا تُعرض.')
-    fig=go.Figure(go.Scatter(x=df.index,y=df.Close,name='Close EGP',mode='lines'))
-    for key in ['EMA20','EMA50','MA200']:fig.add_trace(go.Scatter(x=df.index,y=df[key],name=key,mode='lines'))
-    fig.update_layout(height=360,template='plotly_dark',yaxis_title='EGP',xaxis_title='Available daily closes',margin=dict(l=20,r=20,t=20,b=40))
-    st.plotly_chart(fig,use_container_width=True)
-    st.caption('الخط يصل المشاهدات المتاحة ولا يثبت اكتمال البيانات بين التواريخ. العرض التاريخي لا يعيد تشغيل التحليل الكامل أو التقارير التلقائية.')
+    </style>""",unsafe_allow_html=True)
+    render_research(st,df,symbol)

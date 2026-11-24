@@ -13,7 +13,7 @@ class CloseResearchTests(unittest.TestCase):
     def r(self):return self.p['chart']['result'][0]
     def load(self):return build_close_research(self.p,'COMI.CA',self.now)
     def test_close_only_conflict_is_explicit_not_full_strategy(self):
-        df=self.load();self.assertEqual(df.attrs['mode'],'close_research');self.assertEqual(df.attrs['instrument_type'],'MUTUALFUND');self.assertNotIn('Open',df);self.assertNotIn('score',df);self.assertEqual(len(df),230)
+        df=self.load();self.assertEqual(df.attrs['mode'],'close_research');self.assertEqual(df.attrs['instrument_type'],'MUTUALFUND');self.assertTrue(df['Open'].isna().all());self.assertNotIn('score',df);self.assertEqual(len(df),230)
     def test_null_gap_retained_in_metadata_not_imputed(self):
         self.r()['indicators']['quote'][0]['close'][-3]=None
         df=self.load();self.assertEqual(len(df),229);self.assertEqual(df.attrs['gap_dates'],['2026-11-22'])

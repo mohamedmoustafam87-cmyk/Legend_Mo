@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 from config import (
@@ -87,15 +88,21 @@ def safe_send_message(chat_id, text):
 
 
 def _chunk(blocks, header, limit=3800):
+    # Split oversized stock blocks at line boundaries, preserving every section.
+    # Telegram measures UTF-16 code units, not Python code points.
+    def units(text):return len(text.encode("utf-16-le")) // 2
     messages, current = [], header
     for block in blocks:
-        if len(current) + len(block) > limit and current.strip() != header.strip():
-            messages.append(current)
-            current = "🏆 *تكملة التقرير*\n\n" + block
-        else:
-            current += block
-    if current.strip():
-        messages.append(current)
+        for line in block.splitlines(keepends=True):
+            while units(line) > limit - units(header):
+                take=1
+                while take<len(line) and units(line[:take+1])<=limit-units(header):take+=1
+                if current.strip()!=header.strip():messages.append(current)
+                messages.append(header+line[:take]);current=header;line=line[take:]
+            if units(current+line)>limit:
+                messages.append(current);current=header
+            current+=line
+    if current.strip()!=header.strip():messages.append(current)
     return messages
 
 
@@ -219,27 +226,15 @@ def format_stock_block(item):
 
 
 def format_close_research_block(item):
-    gaps = item.get("gap_dates") or []
-    return (
-        f"{item['ticker']} | Yahoo Finance | EGP\n"
-        f"آخر إغلاق تاريخي بتاريخ {item['history_as_of']}: {num(item['Close'])} EGP\n"
-        f"فتح نفس الجلسة: {num(item.get('selected_open'), default='غير متاح')} EGP\n"
-        "الفتح غير المتاح لا يُستبدل بإغلاق أمس أو بفتح يوم أقدم.\n"
-        f"EMA20 {num(item['EMA20'])} | EMA50 {num(item['EMA50'])} | MA200 {num(item['MA200'])}\n"
-        f"RSI14 {num(item['RSI14'])}\n"
-        f"الحساب على {item['observed_closes']} إغلاقًا متاحًا، وليس جلسات متصلة مؤكدة.\n"
-        f"صفوف إغلاق مفقودة: {len(gaps)}. التواريخ: {', '.join(gaps) or 'لا توجد صفوف فارغة مرصودة'}\n"
-        f"وصف الأداة من المصدر (غير معتمد هنا): {item.get('instrument_type', 'unknown')}\n"
-        "لم نتحقق من تقويم السوق أو أسعار البورصة بشكل مستقل؛ قد توجد تواريخ غائبة أخرى.\n"
-        "عرض يومي محدود، لا سعر لحظي ولا توصية أو نماذج شموع أو أهداف أو وقف خسارة.\n\n"
-    )
+    from daily_research import format_research
+    return format_research(item)
 
 
 def format_scanner_messages(opportunities, ctx=None):
     ctx = ctx or {}
     research = ctx.get("close_research") or []
     limited = _chunk([format_close_research_block(i) for i in research],
-        "عرض تاريخي محدود من Yahoo Finance\nالأسعار مؤرخة وليست أسعار الجلسة الحالية.\n\n") if research else []
+        "التقرير الفني اليومي من Yahoo Finance\nالأسعار مؤرخة وليست أسعار الجلسة الحالية.\n\n") if research else []
     if research and not ctx.get("n_full_analysis") and not opportunities:
         return limited
     header = _context_header(ctx)
@@ -262,6 +257,9 @@ def format_scanner_messages(opportunities, ctx=None):
 
 
 def send_scanner_report(opportunities, ctx=None):
+    if (ctx or {}).get("close_research") and os.getenv("FULL_DATED_REPORT_APPROVED") != "true":
+        print("New dated full report is review-only. No Telegram message sent.")
+        return False
     try:
         results = [safe_send_message(ADMIN_CHAT_ID, message)
                    for message in format_scanner_messages(opportunities, ctx)]
