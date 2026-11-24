@@ -239,11 +239,20 @@ def evaluate_stock_strategy(df, ticker_symbol):
 
         score = 0
 
+        bd_trend = 0
+        bd_adx = 0
+        bd_rsi = 0
+        bd_macd = 0
+        bd_volume = 0
+        bd_breakout = 0
+        bd_candles = 0
+
         reasons = []
 
         if close_price > ma200:
 
             score += 10
+            bd_trend += 10
 
             reasons.append(
                 "✅ السعر أعلى من متوسط 200 يوم"
@@ -252,6 +261,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
         if ma200_slope > 0:
 
             score += 5
+            bd_trend += 5
 
             reasons.append(
                 f"📈 MA200 صاعد ({ma200_slope:+.1f}%)"
@@ -260,6 +270,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
         if ema20 > ema50:
 
             score += 10
+            bd_trend += 10
 
             reasons.append(
                 "📈 EMA20 أعلى من EMA50"
@@ -268,6 +279,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
         if ema50_slope > 0:
 
             score += 5
+            bd_trend += 5
 
             reasons.append(
                 f"📈 EMA50 صاعد ({ema50_slope:+.1f}%)"
@@ -279,6 +291,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
         ):
 
             score += 10
+            bd_adx += 10
 
             reasons.append(
                 f"💪 اتجاه قوي ومتزايد (ADX: {adx:.1f})"
@@ -287,6 +300,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
         elif adx > 20:
 
             score += 5
+            bd_adx += 5
 
             reasons.append(
                 f"📊 قوة اتجاه مقبولة (ADX: {adx:.1f})"
@@ -295,6 +309,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
         if 50 <= rsi <= 65:
 
             score += 10
+            bd_rsi += 10
 
             reasons.append(
                 f"🔥 RSI مناسب للزخم ({rsi:.1f})"
@@ -303,6 +318,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
         elif 45 <= rsi < 50:
 
             score += 5
+            bd_rsi += 5
 
             reasons.append(
                 f"⚠️ RSI ضعيف نسبيًا ({rsi:.1f})"
@@ -311,6 +327,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
         elif rsi < 40:
 
             score += 5
+            bd_rsi += 5
 
             reasons.append(
                 f"⚠️ RSI في مناطق التجميع ({rsi:.1f})"
@@ -319,6 +336,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
         if bullish_macd_cross:
 
             score += 10
+            bd_macd += 10
 
             reasons.append(
                 "🚀 MACD Bullish Cross"
@@ -327,6 +345,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
         elif macd_positive:
 
             score += 5
+            bd_macd += 5
 
             reasons.append(
                 "📈 MACD إيجابي"
@@ -335,6 +354,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
         if volume_ratio >= 1.5:
 
             score += 10
+            bd_volume += 10
 
             reasons.append(
                 f"💥 حجم تداول قوي ({volume_ratio:.1f}x المتوسط)"
@@ -343,6 +363,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
         elif volume_ratio >= 1.0:
 
             score += 5
+            bd_volume += 5
 
             reasons.append(
                 f"📊 حجم تداول جيد ({volume_ratio:.1f}x المتوسط)"
@@ -351,6 +372,7 @@ def evaluate_stock_strategy(df, ticker_symbol):
         if breakout:
 
             score += 5
+            bd_breakout += 5
 
             reasons.append(
                 "🎯 السعر اخترق مقاومة الـ20 جلسة"
@@ -359,6 +381,10 @@ def evaluate_stock_strategy(df, ticker_symbol):
         if candle_reasons:
 
             score += min(
+                len(candle_reasons) * 5,
+                5
+            )
+            bd_candles += min(
                 len(candle_reasons) * 5,
                 5
             )
@@ -371,6 +397,18 @@ def evaluate_stock_strategy(df, ticker_symbol):
             score,
             100
         )
+
+        # Score breakdown for the app dashboard (same conditions and weights as above, no logic change)
+        score_breakdown = [
+            {"name": "الاتجاه والمتوسطات", "value": bd_trend, "max": 30},
+            {"name": "قوة الاتجاه ADX", "value": bd_adx, "max": 10},
+            {"name": "زخم RSI", "value": bd_rsi, "max": 10},
+            {"name": "زخم MACD", "value": bd_macd, "max": 10},
+            {"name": "حجم التداول", "value": bd_volume, "max": 10},
+            {"name": "اختراق المقاومة", "value": bd_breakout, "max": 5},
+            {"name": "الشموع اليابانية", "value": bd_candles, "max": 5},
+        ]
+        score_max = 80
 
         # ==========================================================
         # 1 MONTH FORECAST SCORE
@@ -605,6 +643,8 @@ def evaluate_stock_strategy(df, ticker_symbol):
             "ticker": ticker_symbol.replace(".CA", ""),
             "price": round(close_price, 2),
             "score": score,
+            "score_breakdown": score_breakdown,
+            "score_max": score_max,
             "rec": recommendation,
             "trend_status": trend_status,
             "forecast_1m_score": forecast_1m_score,

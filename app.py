@@ -347,14 +347,24 @@ def normalize_score(value, maximum):
 # ============================================================
 
 def calculate_scenarios(analysis):
-    score = clamp(analysis.get("score", 50))
-    trend = normalize_score(analysis.get("trend_score", 0), 20)
-    momentum = normalize_score(analysis.get("momentum_score", 0), 15)
-    volume = normalize_score(analysis.get("volume_score", 0), 15)
-    money = normalize_score(analysis.get("money_flow_score", 0), 10)
+    breakdown = analysis.get("score_breakdown") or []
+    if not breakdown:
+        return None
 
-    bullish = score * 0.45 + trend * 0.20 + momentum * 0.25 + volume * 0.05 + money * 0.05
-    bearish = (100 - score) * 0.45 + (100 - trend) * 0.20 + (100 - momentum) * 0.25 + (100 - volume) * 0.05 + (100 - money) * 0.05
+    score_max = safe_float(analysis.get("score_max"), 0)
+    if score_max <= 0:
+        score_max = sum(safe_float(item.get("max"), 0) for item in breakdown) or 100
+    score_norm = clamp(safe_float(analysis.get("score", 0), 0) / score_max * 100)
+
+    parts = []
+    for item in breakdown:
+        maximum = safe_float(item.get("max"), 0)
+        if maximum > 0:
+            parts.append(clamp(safe_float(item.get("value"), 0) / maximum * 100))
+    comp_norm = sum(parts) / len(parts) if parts else score_norm
+
+    bullish = score_norm * 0.5 + comp_norm * 0.5
+    bearish = (100 - score_norm) * 0.5 + (100 - comp_norm) * 0.5
     sideways = 100 - abs(bullish - bearish)
 
     bullish = max(1, bullish)
@@ -629,15 +639,13 @@ def build_chart(
 # ============================================================
 
 def build_radar(analysis):
-    categories = ["الاتجاه", "الزخم", "الحجم", "حركة السعر", "السيولة", "التقلبات", "القوة"]
+    breakdown = analysis.get("score_breakdown") or []
+    if not breakdown:
+        return None
+    categories = [str(item.get("name", "")) for item in breakdown]
     values = [
-        normalize_score(analysis.get("trend_score"), 20),
-        normalize_score(analysis.get("momentum_score"), 15),
-        normalize_score(analysis.get("volume_score"), 15),
-        normalize_score(analysis.get("price_action_score"), 15),
-        normalize_score(analysis.get("money_flow_score"), 10),
-        normalize_score(analysis.get("volatility_score"), 5),
-        normalize_score(analysis.get("price_strength_score"), 5),
+        normalize_score(item.get("value"), safe_float(item.get("max"), 1) or 1)
+        for item in breakdown
     ]
     categories.append(categories[0])
     values.append(values[0])
@@ -916,6 +924,7 @@ realtime = bool(analysis.get("is_realtime", False))
 trend = trend_description(df)
 score = clamp(analysis.get("score", 0))
 score_class = score_color(score)
+score_max = safe_float(analysis.get("score_max"), 100) or 100
 recommendation = analysis.get("rec", "حيادي")
 
 st.markdown(
@@ -1034,8 +1043,8 @@ with col1:
 <div class="lm-card" style="height:140px;">
     <div class="score-label">تقييم LENS الشامل</div>
     <div class="score-number {score_class}">{score:.0f}</div>
-    <div style="color:#737B85; font-size:11px; margin-top:7px;">/ 100 • {score_text(score)}</div>
-    <div class="progress-bg"><div class="progress-fill" style="width:{score:.0f}%;"></div></div>
+    <div style="color:#737B85; font-size:11px; margin-top:7px;">/ {score_max:.0f} • {score_text(score)}</div>
+    <div class="progress-bg"><div class="progress-fill" style="width:{(score / score_max * 100) if score_max > 0 else 0:.0f}%;"></div></div>
 </div>
 """,
         unsafe_allow_html=True,
@@ -1046,7 +1055,8 @@ with col2:
     st.markdown(f"""<div class="lm-card" style="height:140px;"><div class="label">مؤشر القوة RSI 14</div><div class="metric-value">{fmt(rsi, 1)}</div><div class="metric-sub">الزخم الفني</div></div>""", unsafe_allow_html=True)
 
 with col3:
-    adx = safe_float(df["ADX_14"].iloc[-1] if "ADX_14" in df.columns else np.nan)
+    adx_col = "ADX_14" if "ADX_14" in df.columns else ("ADX" if "ADX" in df.columns else None)
+    adx = safe_float(df[adx_col].iloc[-1]) if adx_col else np.nan
     st.markdown(f"""<div class="lm-card" style="height:140px;"><div class="label">قوة الاتجاه ADX</div><div class="metric-value">{fmt(adx, 1)}</div><div class="metric-sub">قوة الاتجاه</div></div>""", unsafe_allow_html=True)
 
 with col4:
@@ -1054,7 +1064,12 @@ with col4:
     st.markdown(f"""<div class="lm-card" style="height:140px;"><div class="label">معدل حجم التداول</div><div class="metric-value">{fmt(volume_ratio, 2)}x</div><div class="metric-sub">نشاط التداول</div></div>""", unsafe_allow_html=True)
 
 with col5:
-    atr_pct = safe_float(df["ATR_Pct"].iloc[-1] if "ATR_Pct" in df.columns else np.nan)
+    if "ATR_Pct" in df.columns:
+        atr_pct = safe_float(df["ATR_Pct"].iloc[-1])
+    elif "ATR" in df.columns and safe_float(df["Close"].iloc[-1]) > 0:
+        atr_pct = safe_float(df["ATR"].iloc[-1]) / safe_float(df["Close"].iloc[-1]) * 100
+    else:
+        atr_pct = np.nan
     st.markdown(f"""<div class="lm-card" style="height:140px;"><div class="label">معدل التذبذب ATR</div><div class="metric-value">{fmt(atr_pct, 2)}%</div><div class="metric-sub">قياس المخاطرة</div></div>""", unsafe_allow_html=True)
 
 
@@ -1066,18 +1081,16 @@ st.markdown("## تحليل تفصيل النقاط")
 left, right = st.columns([1.2, 1])
 
 with left:
+    breakdown_list = analysis.get("score_breakdown") or []
     breakdown = {
-        "الاتجاه": (analysis.get("trend_score", 0), 20),
-        "الزخم": (analysis.get("momentum_score", 0), 15),
-        "حجم التداول": (analysis.get("volume_score", 0), 15),
-        "حركة السعر": (analysis.get("price_action_score", 0), 15),
-        "الدعم والمقاومة": (analysis.get("sr_score", 0), 15),
-        "تدفق السيولة": (analysis.get("money_flow_score", 0), 10),
-        "التقلبات": (analysis.get("volatility_score", 0), 5),
-        "قوة السعر": (analysis.get("price_strength_score", 0), 5),
+        item.get("name", ""): (item.get("value", 0), item.get("max", 0))
+        for item in breakdown_list
+        if item.get("name")
     }
 
     rows_html = ""
+    if not breakdown:
+        rows_html = """<div style="font-size:12px; color:#B8BEC6;">تفصيل النقاط غير متاح في نسخة الاستراتيجية الحالية.</div>"""
     for name, (value, maximum) in breakdown.items():
         val = clamp(safe_float(value, 0), 0, maximum)
         percentage = (val / maximum * 100) if maximum else 0
@@ -1113,11 +1126,18 @@ with right:
 """,
         unsafe_allow_html=True,
     )
-    st.plotly_chart(
-        build_radar(analysis),
-        use_container_width=True,
-        config={"displayModeBar": False},
-    )
+    radar_fig = build_radar(analysis)
+    if radar_fig is None:
+        st.markdown(
+            """<div class="lm-card"><div style="font-size:12px; color:#B8BEC6;">الرادار غير متاح حالياً لعدم توفر تفصيل النقاط من نسخة الاستراتيجية.</div></div>""",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.plotly_chart(
+            radar_fig,
+            use_container_width=True,
+            config={"displayModeBar": False},
+        )
 
 
 # ============================================================
@@ -1127,24 +1147,30 @@ with right:
 st.markdown("## ميزان القوى الفني")
 st.caption("مؤشر مركب من نقاط التحليل الفني وليس احتمالاً إحصائياً. الاحتمالات التاريخية الفعلية في قسم الإعدادات النشطة أعلاه.")
 scenarios = calculate_scenarios(analysis)
-c1, c2, c3 = st.columns(3)
+if scenarios is None:
+    st.markdown(
+        """<div class="lm-card"><div style="font-size:12px; color:#B8BEC6;">ميزان القوى غير متاح حالياً لعدم توفر تفصيل النقاط من نسخة الاستراتيجية.</div></div>""",
+        unsafe_allow_html=True,
+    )
+else:
+    c1, c2, c3 = st.columns(3)
 
-for col, title, value, cls in [
-    (c1, "ميل صاعد Bullish", scenarios["Bullish"], "green"),
-    (c2, "ميل عرضي Sideways", scenarios["Sideways"], "yellow"),
-    (c3, "ميل هابط Bearish", scenarios["Bearish"], "red"),
-]:
-    with col:
-        st.markdown(
-            f"""
+    for col, title, value, cls in [
+        (c1, "ميل صاعد Bullish", scenarios["Bullish"], "green"),
+        (c2, "ميل عرضي Sideways", scenarios["Sideways"], "yellow"),
+        (c3, "ميل هابط Bearish", scenarios["Bearish"], "red"),
+    ]:
+        with col:
+            st.markdown(
+                f"""
 <div class="scenario">
     <div class="scenario-title">{title}</div>
     <div class="scenario-value {cls}">{value:.0f}%</div>
     <div class="progress-bg"><div class="progress-fill" style="width:{value:.0f}%;"></div></div>
 </div>
 """,
-            unsafe_allow_html=True,
-        )
+                unsafe_allow_html=True,
+            )
 
 
 # ============================================================
