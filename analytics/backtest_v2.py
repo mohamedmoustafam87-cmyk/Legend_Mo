@@ -40,12 +40,15 @@ OUTCOME_EXPIRED = "expired"
 OUTCOME_UNRESOLVED = "unresolved"
 
 
-def _trade_outcome(df_after, entry_idx, stop, tp1, horizon_end):
+def _trade_outcome(df_after, entry_idx, stop, tp1, horizon_end, entry_price=None):
     """
     يفحص الجلسات من يوم التنفيذ حتى horizon_end.
     df_after: الصفوف القابلة للفحص (من يوم التنفيذ).
     يعيد (outcome, exit_price, exit_date, sessions_held).
     نفس-الجلسة هدف+وقف = stop_first (ليس نجاحًا).
+    يوم التنفيذ: الوقف مفحوص على كامل مدى الجلسة (تحفظي — قاع اليوم قد
+    يسبق الاختراق فعليًا)، وفجوة الافتتاح فوق TP1 تملأ أمر البيع عند
+    الافتتاح (exit = max(open, tp1)).
     """
     for i in range(len(df_after)):
         if entry_idx + i > horizon_end:
@@ -59,14 +62,17 @@ def _trade_outcome(df_after, entry_idx, stop, tp1, horizon_end):
         if hit_stop:
             return OUTCOME_STOP, stop, df_after.index[i], i + 1
         if hit_tp1:
-            return OUTCOME_TP1, tp1, df_after.index[i], i + 1
+            exit_px = tp1
+            if i == 0 and entry_price is not None and entry_price > tp1:
+                exit_px = entry_price  # فجوة فوق الهدف: البيع بسعر التنفيذ
+            return OUTCOME_TP1, exit_px, df_after.index[i], i + 1
     if len(df_after) and entry_idx + len(df_after) - 1 >= horizon_end:
         last = df_after.iloc[-1]
         return OUTCOME_EXPIRED, float(last["Close"]), df_after.index[-1], len(df_after)
     return OUTCOME_UNRESOLVED, None, None, len(df_after)
 
 
-def run_symbol_backtest(symbol, df, variant="v2"):
+def run_symbol_backtest(symbol, df, variant="v2", ema_max_dist=None):
     """
     يعيد قائمة صفقات/إشارات لسهم واحد عبر التاريخ.
     df: OHLCV كامل (خام من Yahoo).
@@ -81,6 +87,11 @@ def run_symbol_backtest(symbol, df, variant="v2"):
         return []
 
     records = []
+    drops = {}  # كل مسار استبعاد بعد توليد الإشارة يُحسب صراحة
+
+    def _drop(reason):
+        drops[reason] = drops.get(reason, 0) + 1
+
     n = len(data)
     open_until = -1  # [CANDIDATE-B] صفقة واحدة مفتوحة لكل سهم
 
@@ -92,8 +103,16 @@ def run_symbol_backtest(symbol, df, variant="v2"):
         horizon_end = min(t + MEASUREMENT_HORIZON, n - 1)
 
         if variant == "v2":
-            sig = evaluate_signal_v2(hist.copy(), symbol)
-            if sig is None or sig.status != "BUY":
+            kwargs = {} if ema_max_dist is None else {"ema_max_dist": ema_max_dist}
+            sig = evaluate_signal_v2(hist.copy(), symbol, **kwargs)
+            if sig is None:
+                continue
+            if sig.status != "BUY":
+                records.append({
+                    "symbol": symbol, "variant": variant,
+                    "signal_date": data.index[t], "score": sig.score,
+                    "outcome": "wait_filtered",
+                })
                 continue
             # الدخول المشروط: تجاوز قمة جلسة الإشارة خلال 3 جلسات
             entry_price = None
@@ -117,14 +136,16 @@ def run_symbol_backtest(symbol, df, variant="v2"):
                 continue
             stop = stop_rule(entry_price, sig.support, sig.atr)
             if stop is None:
+                _drop("v2_invalid_stop_at_execution")
                 continue
             rps = entry_price - stop
             tp1 = entry_price + 2.0 * rps
             tp2 = entry_price + 3.0 * rps
             shares = position_size(entry_price, stop)
             if shares <= 0:
+                _drop("v2_zero_position_size")
                 continue
-        else:  # v1_baseline
+        else:  # v1_baseline / v1_advertised
             if not liquidity_ok_on(hist):
                 continue
             try:
@@ -134,15 +155,41 @@ def run_symbol_backtest(symbol, df, variant="v2"):
             if analysis is None:
                 continue
             if t + 1 >= n:
+                _drop("v1_no_next_session")
                 continue
-            entry_idx = t + 1
-            entry_price = float(data.iloc[entry_idx]["Open"])
+            if variant == "v1_advertised":
+                # الدخول كما يُعلن في التقرير الحالي: حد شراء عند ideal_entry
+                ideal = float(analysis["ideal_entry"])
+                entry_price = None
+                entry_idx = None
+                for j in range(1, ENTRY_WINDOW_SESSIONS + 1):
+                    if t + j >= n:
+                        break
+                    bar = data.iloc[t + j]
+                    if float(bar["Low"]) <= ideal:
+                        entry_idx = t + j
+                        entry_price = min(float(bar["Open"]), ideal)
+                        break
+                if entry_price is None:
+                    if (t + ENTRY_WINDOW_SESSIONS) <= (n - 1):
+                        records.append({
+                            "symbol": symbol, "variant": variant,
+                            "signal_date": data.index[t],
+                            "score": analysis["score"],
+                            "outcome": OUTCOME_NOT_EXECUTED,
+                        })
+                    open_until = min(t + ENTRY_WINDOW_SESSIONS, n - 1)
+                    continue
+            else:
+                entry_idx = t + 1
+                entry_price = float(data.iloc[entry_idx]["Open"])
             stop = float(analysis["stop_loss"])
             tp1 = float(analysis["tp1"])
             tp2 = float(analysis["tp2"])
             shares = int(analysis["shares"])
             sig = type("S", (), {"score": analysis["score"]})()
             if entry_price <= 0 or stop <= 0 or stop >= entry_price or shares <= 0:
+                _drop("v1_invalid_entry_or_stop_or_size")
                 continue
 
         if not fully_observed:
@@ -156,7 +203,7 @@ def run_symbol_backtest(symbol, df, variant="v2"):
             continue
         after = data.iloc[entry_idx: horizon_end + 1]
         outcome, exit_price, exit_date, held = _trade_outcome(
-            after, entry_idx, stop, tp1, horizon_end
+            after, entry_idx, stop, tp1, horizon_end, entry_price=entry_price
         )
         open_until = entry_idx + held - 1 if outcome in (
             OUTCOME_TP1, OUTCOME_STOP, OUTCOME_EXPIRED) else horizon_end
@@ -183,24 +230,50 @@ def run_symbol_backtest(symbol, df, variant="v2"):
                 rec[f"net_pl_{sc.name}"] = round(
                     shares * (slipped_exit - slipped_entry) - fees, 2)
         records.append(rec)
+    for r in records:
+        r.setdefault("drops", None)
+    if records:
+        records[0]["drops"] = drops
+    elif drops:
+        records.append({"symbol": symbol, "variant": variant,
+                        "signal_date": None, "outcome": "meta", "drops": drops})
     return records
 
 
+KNOWN_OUTCOMES = (OUTCOME_TP1, OUTCOME_STOP, OUTCOME_EXPIRED,
+                  OUTCOME_UNRESOLVED, OUTCOME_NOT_EXECUTED)
+
+
 def summarize(records, variant):
-    """ملخص أداء نسخة واحدة بالأرقام المعتمدة."""
-    recs = [r for r in records if r["variant"] == variant]
+    """ملخص أداء نسخة واحدة بالأرقام المعتمدة + تسوية كاملة للاستبعادات."""
+    vrecs = [r for r in records if r["variant"] == variant]
+    recs = [r for r in vrecs if r.get("outcome") in KNOWN_OUTCOMES]
+    waits = [r for r in vrecs if r.get("outcome") == "wait_filtered"]
     executed = [r for r in recs if r.get("outcome") in (OUTCOME_TP1, OUTCOME_STOP, OUTCOME_EXPIRED)]
     unresolved = [r for r in recs if r.get("outcome") == OUTCOME_UNRESOLVED]
     not_exec = [r for r in recs if r.get("outcome") == OUTCOME_NOT_EXECUTED]
+    drops = {}
+    for r in vrecs:
+        for k, v in (r.get("drops") or {}).items():
+            drops[k] = drops.get(k, 0) + v
+    unknown = [r for r in vrecs if r.get("outcome") not in KNOWN_OUTCOMES + ("wait_filtered", "meta")]
     tp1 = [r for r in executed if r["outcome"] == OUTCOME_TP1]
     stopped = [r for r in executed if r["outcome"] == OUTCOME_STOP]
     expired = [r for r in executed if r["outcome"] == OUTCOME_EXPIRED]
     out = {
         "variant": variant,
         "signals": len(recs),
+        "reconciliation": {
+            "total_records": len(vrecs),
+            "signals_counted": len(recs),
+            "wait_filtered": len(waits),
+            "drops_by_reason": drops,
+            "unknown_outcome_records": len(unknown),
+        },
         "executed": len(executed),
         "not_executed": len(not_exec),
         "unresolved_excluded": len(unresolved),
+        "wait_filtered": len(waits),
         "tp1_first": len(tp1),
         "stop_first": len(stopped),
         "expired": len(expired),

@@ -41,9 +41,15 @@ def load_symbol(symbol, max_age_hours=20):
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     out_name = "backtest_results.json"
+    variants = ("v1_baseline", "v2")
+    ema_max_dist = None
     for a in sys.argv[1:]:
         if a.startswith("--out="):
             out_name = a.split("=", 1)[1]
+        elif a.startswith("--variant="):
+            variants = tuple(a.split("=", 1)[1].split(","))
+        elif a.startswith("--ema-dist="):
+            ema_max_dist = float(a.split("=", 1)[1])
     symbols = args or None
     if not symbols:
         from config import EGX_STOCKS
@@ -56,9 +62,9 @@ def main():
         if df is None or df.empty:
             failed.append(sym)
             continue
-        for variant in ("v1_baseline", "v2"):
+        for variant in variants:
             try:
-                all_records.extend(run_symbol_backtest(sym, df, variant))
+                all_records.extend(run_symbol_backtest(sym, df, variant, ema_max_dist=ema_max_dist))
             except Exception as e:
                 print(f"⚠️ {sym} {variant}: {type(e).__name__}: {e}")
         if i % 25 == 0:
@@ -66,7 +72,7 @@ def main():
 
     out = {
         "records": all_records,
-        "summary": [summarize(all_records, v) for v in ("v1_baseline", "v2")],
+        "summary": [summarize(all_records, v) for v in variants],
         "failed_symbols": failed,
     }
     out_path = os.path.join(CACHE_DIR, out_name)

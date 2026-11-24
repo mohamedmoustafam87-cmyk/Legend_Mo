@@ -76,7 +76,7 @@ def stop_rule(price, support, atr):
     return stop if 0 < stop < price else None
 
 
-def evaluate_signal_v2(df, symbol):
+def evaluate_signal_v2(df, symbol, ema_max_dist=EMA20_MAX_DISTANCE_PCT):
     """
     df: مقصوص حتى جلسة الإشارة شاملةً إياها، بالمؤشرات محسوبة مسبقًا.
     يعيد SignalV2 أو None إن فشلت بوابة إلزامية.
@@ -116,7 +116,7 @@ def evaluate_signal_v2(df, symbol):
     distance_from_ema = float(analysis["distance_from_ema"])
     status = "BUY"
     wait_reason = ""
-    if distance_from_ema > EMA20_MAX_DISTANCE_PCT:
+    if distance_from_ema > ema_max_dist:
         status = "WAIT"
         wait_reason = f"السعر ممتد فوق EMA20 ({distance_from_ema:.1f}%)"
     elif distance_from_ema < EMA20_MIN_DISTANCE_PCT:
