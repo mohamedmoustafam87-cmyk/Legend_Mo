@@ -48,6 +48,7 @@ def render_close_research(st, df, symbol):
     st.markdown("""<style>
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"],
     [data-testid="stCaptionContainer"] {color:#e2e8f0 !important;}
+    [data-testid="stAlert"] {background:#172333 !important; color:#f1f5f9 !important;}
     [data-testid="stAlert"] p {color:#f1f5f9 !important;}
     .block-container {padding-top:5rem !important;}
     </style>""", unsafe_allow_html=True)
