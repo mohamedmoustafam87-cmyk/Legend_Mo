@@ -1017,6 +1017,11 @@ else:
             unsafe_allow_html=True,
         )
 
+# بطاقات خطة الصفقة: مع إعداد نشط، أو كخطة مشروطة عند توفر المستويات المحسوبة
+if setups or analysis.get("tp1") is not None:
+    if not setups:
+        st.caption("خطة مشروطة بتنفيذ الدخول المقترح، وليست توصية شراء.")
+
     p1, p2, p3, p4 = st.columns(4)
     for col, label, value, cls in [
         (p1, "وقف الخسارة", fmt(analysis.get("stop_loss")), "red"),
