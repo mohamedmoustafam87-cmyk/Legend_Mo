@@ -618,7 +618,33 @@ def evaluate_stock_strategy(df, ticker_symbol, min_score=MIN_SCORE_THRESHOLD):
         # 3. الاقتراب من المقاومة الكبرى
         if close_price >= (resistance * 0.98):
             exit_signals.append("🎯 السعر يقترب بشدة من المقاومة الرئيسية - راقب جني الأرباح")
-            
+
+        # 4. قياس مساحة الصعود حتى المقاومة مقابل حجم المخاطرة
+        # قياس معروض فقط - لا استبعاد تلقائي بسبب وجود مقاومة
+        risk_per_share_val = float(risk["risk_per_share"])
+
+        resistance_room_r = None
+
+        if (
+            resistance > close_price
+            and risk_per_share_val > 0
+        ):
+            resistance_room_r = round(
+                (resistance - close_price) / risk_per_share_val,
+                2
+            )
+
+            reasons.append(
+                f"📏 مساحة الصعود حتى المقاومة تعادل "
+                f"{resistance_room_r:.1f}x من حجم المخاطرة"
+            )
+
+            if resistance < risk["tp1"]:
+                exit_signals.append(
+                    f"⚠️ المقاومة ({resistance:.2f}) أقرب من الهدف الأول - "
+                    f"مساحة الصعود المتاحة تعادل {resistance_room_r:.1f}x من المخاطرة"
+                )
+
         if not exit_signals:
             exit_strategy_text = "🟢 الوضع آمن - استمر في الاحتفاظ حتى تحقيق الأهداف (TP1 / TP2)"
         else:
@@ -665,6 +691,7 @@ def evaluate_stock_strategy(df, ticker_symbol, min_score=MIN_SCORE_THRESHOLD):
             "atr": round(atr, 2),
             "support": round(support, 2),
             "resistance": round(resistance, 2),
+            "resistance_room_r": resistance_room_r,
             "volume_ratio": round(volume_ratio, 2),
             "stop_loss": risk["stop_loss"],
             "stop_loss_pct": risk.get("stop_loss_pct", 0),
