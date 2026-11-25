@@ -141,6 +141,20 @@ REPORT_TIMES = [
 # هامش السماح بالدقائق - لو الـ workflow اتأخر عن الميعاد المحدد
 REPORT_TIME_TOLERANCE_MINUTES = 5
 
+# أيام التداول: الأحد (6) إلى الخميس (3) بنظام Python weekday()
+TRADING_WEEKDAYS = {6, 0, 1, 2, 3}
+
+# إجازات البورصة: سطر YYYY-MM-DD لكل يوم في egx_holidays.txt (اختياري).
+# ملف فاضي أو غير موجود = التقارير تتبعت حتى في أيام الإجازة (نفس سلوك البوت الأصلي).
+EGX_HOLIDAYS = set()
+_holidays_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "egx_holidays.txt")
+if os.path.exists(_holidays_file):
+    with open(_holidays_file, encoding="utf-8") as _f:
+        for _line in _f:
+            _day = _line.split("#")[0].strip()
+            if _day:
+                EGX_HOLIDAYS.add(_day)
+
 # ==========================================================
 # Backtest.py Compatibility (not used by the bot itself)
 # ==========================================================
