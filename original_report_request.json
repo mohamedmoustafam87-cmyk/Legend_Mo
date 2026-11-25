@@ -3,5 +3,7 @@
   "source": "Yahoo Finance",
   "baseline": "9576669ee92c82b8d8ef96649d2842efb34bc3a5",
   "requested_at": "2026-11-25T19:56:28+02:00",
-  "channel": "WhatsApp"
+  "channel": "WhatsApp",
+  "attempt": 2,
+  "note": "Retry after pre-send TypeError (run 45670402389); adapter now uses production functions"
 }
