@@ -565,10 +565,13 @@ def evaluate_stock_strategy(df, ticker_symbol, min_score=MIN_SCORE_THRESHOLD):
 
         # ==========================================================
         # Risk Management
+        # كل الحسابات (الوقف/الأهداف/الكمية/نسبة الوقف) من نقطة
+        # الدخول المقترحة نفسها، مش من سعر الإغلاق — أساس واحد
+        # للصفقة كما هو معتمد من المستخدم.
         # ==========================================================
 
         risk = calculate_risk_management(
-            close_price,
+            ideal_entry,
             atr,
             support
         )
@@ -580,17 +583,17 @@ def evaluate_stock_strategy(df, ticker_symbol, min_score=MIN_SCORE_THRESHOLD):
             risk["stop_loss"]
         )
 
-        if stop_loss >= close_price:
+        if stop_loss >= ideal_entry:
             return None
 
         # ==========================================================
         # Expected Timeframe Calculation for TP1 & TP2 (Based on ATR)
         # ==========================================================
 
-        distance_tp1 = risk["tp1"] - close_price
-        distance_tp2 = risk["tp2"] - close_price
+        distance_tp1 = risk["tp1"] - ideal_entry
+        distance_tp2 = risk["tp2"] - ideal_entry
 
-        daily_speed = atr if atr > 0 else (close_price * 0.02)
+        daily_speed = atr if atr > 0 else (ideal_entry * 0.02)
         effective_speed = daily_speed * 1.2 if adx > 25 else daily_speed
 
         sessions_tp1 = max(1, round(distance_tp1 / effective_speed))

@@ -2,7 +2,7 @@ from config import TOTAL_CAPITAL, RISK_PER_TRADE
 
 
 def calculate_risk_management(
-    close_price,
+    entry_price,
     atr,
     support=None
 ):
@@ -24,10 +24,10 @@ def calculate_risk_management(
         # Validate Inputs
         # ==========================================================
 
-        close_price = float(close_price)
+        entry_price = float(entry_price)
         atr = float(atr)
 
-        if close_price <= 0:
+        if entry_price <= 0:
             return None
 
         if atr <= 0:
@@ -47,7 +47,7 @@ def calculate_risk_management(
 
             if (
                 support > 0
-                and support < close_price
+                and support <= entry_price
             ):
 
                 structural_stop = (
@@ -57,7 +57,7 @@ def calculate_risk_management(
 
         # Stop بديل يعتمد على ATR
         volatility_stop = (
-            close_price - (2.0 * atr)
+            entry_price - (2.0 * atr)
         )
 
 
@@ -82,7 +82,7 @@ def calculate_risk_management(
         if stop_loss <= 0:
             return None
 
-        if stop_loss >= close_price:
+        if stop_loss >= entry_price:
             return None
 
 
@@ -91,7 +91,7 @@ def calculate_risk_management(
         # ==========================================================
 
         risk_per_share = (
-            close_price - stop_loss
+            entry_price - stop_loss
         )
 
         if risk_per_share <= 0:
@@ -127,7 +127,7 @@ def calculate_risk_management(
 
         shares_by_capital = int(
             TOTAL_CAPITAL /
-            close_price
+            entry_price
         )
 
 
@@ -148,7 +148,7 @@ def calculate_risk_management(
 
         position_value = (
             shares_to_buy *
-            close_price
+            entry_price
         )
 
 
@@ -168,14 +168,14 @@ def calculate_risk_management(
 
         # TP1 = 2R
         tp_1 = (
-            close_price +
+            entry_price +
             (2 * risk_per_share)
         )
 
 
         # TP2 = 3R
         tp_2 = (
-            close_price +
+            entry_price +
             (3 * risk_per_share)
         )
 
@@ -185,12 +185,12 @@ def calculate_risk_management(
         # ==========================================================
 
         rr_1 = (
-            tp_1 - close_price
+            tp_1 - entry_price
         ) / risk_per_share
 
 
         rr_2 = (
-            tp_2 - close_price
+            tp_2 - entry_price
         ) / risk_per_share
 
 
@@ -199,8 +199,8 @@ def calculate_risk_management(
         # ==========================================================
 
         stop_loss_pct = (
-            (close_price - stop_loss)
-            / close_price
+            (entry_price - stop_loss)
+            / entry_price
         ) * 100
 
 
