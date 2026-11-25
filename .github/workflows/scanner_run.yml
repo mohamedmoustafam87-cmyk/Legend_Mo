@@ -4,11 +4,12 @@ on:
     branches: [main]
     paths: [original_report_request.json]
   workflow_dispatch:
-  # Schedule PAUSED Nov 25 pending the user's lateness-policy choice
-  # (15-minute cap vs until-next-slot catchup). Re-add the trigger to resume:
-  #  schedule:
-  #    - cron: '0,10,20,30,40,50 10-15 * * 0-4'
-  #      timezone: "Africa/Cairo"
+  # Every 10 min 10:00-15:50 Cairo, Sun-Thu. The script gates on the Cairo
+  # clock with until-next-slot catchup (user-approved Nov 25) and dedups
+  # durably, so GitHub trigger delays cannot skip or duplicate a slot.
+  schedule:
+    - cron: '0,10,20,30,40,50 10-15 * * 0-4'
+      timezone: "Africa/Cairo"
 permissions:
   contents: write
 concurrency:
