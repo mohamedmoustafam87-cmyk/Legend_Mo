@@ -10,7 +10,11 @@ def main():
     destination=os.environ['ADMIN_CHAT_ID'].strip()
     journal=PrivateJournal(os.environ['TELEGRAM_TOKEN'].strip(),os.environ['GH_TOKEN'],os.environ['GITHUB_REPOSITORY'])
     journal.load();journal.verify_private(destination)
-    original_identity='original-report:owner-request-2026-11-24T15:37:02-Cairo'
+    with open('original_report_request.json',encoding='utf-8') as request_file:
+        request_id=json.load(request_file)['request']
+    if not request_id.startswith('owner-original-report-'):
+        raise ValueError('Unrecognized report request identity')
+    original_identity='original-report:'+request_id
     prior=journal.state.get(original_identity,{})
     if prior.get('status')=='claimed' and not prior.get('receipts'):
         prior.update(status='reconciled-not-received',reconciliation='Owner WhatsApp 2026-11-24T15:45:32 Cairo confirmed nothing arrived')

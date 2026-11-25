@@ -1,1 +1,7 @@
-{"request": "owner-original-report-2026-11-24T15:37:02-Cairo", "source": "Yahoo Finance", "baseline": "bbc04406a17408c74a2b955f12ed2a78fe6a5e6e", "receipt_reconciliation": "Owner confirmed no original report received at15:45:32 Cairo,24Nov2026"}
+{
+  "request": "owner-original-report-2026-11-25T19:56:28-Cairo",
+  "source": "Yahoo Finance",
+  "baseline": "9576669ee92c82b8d8ef96649d2842efb34bc3a5",
+  "requested_at": "2026-11-25T19:56:28+02:00",
+  "channel": "WhatsApp"
+}
