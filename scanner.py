@@ -383,6 +383,17 @@ def process_symbol(symbol):
     if df is None:
         return None
 
+    # شرطا الاتجاه الإلزاميان للترشيح (معتمدان من المستخدم):
+    # السعر فوق MA200 و EMA20 فوق EMA50 - شرطان لا تعوّضهما النقاط.
+    # القيم الفارغة (NaN) تفشل الشرط تلقائيًا فيُستبعد السهم.
+    latest_row = df.iloc[-1]
+
+    if not (
+        float(latest_row["Close"]) > float(latest_row["MA_200"])
+        and float(latest_row["EMA_20"]) > float(latest_row["EMA_50"])
+    ):
+        return None
+
     analysis = evaluate_stock_strategy(
         df,
         symbol

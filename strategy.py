@@ -620,29 +620,33 @@ def evaluate_stock_strategy(df, ticker_symbol, min_score=MIN_SCORE_THRESHOLD):
             exit_signals.append("🎯 السعر يقترب بشدة من المقاومة الرئيسية - راقب جني الأرباح")
 
         # 4. قياس مساحة الصعود حتى المقاومة مقابل حجم المخاطرة
-        # قياس معروض فقط - لا استبعاد تلقائي بسبب وجود مقاومة
-        risk_per_share_val = float(risk["risk_per_share"])
+        # من نقطة الدخول المقترحة (الدعم الواقعي) لا من سعر الإغلاق،
+        # وبنفس وقف الخسارة المعروض. قياس معروض فقط - لا استبعاد
+        # تلقائي بسبب وجود مقاومة. لو المقاومة عند نقطة الدخول أو
+        # تحتها فهي غير مقيّدة للصفقة: لا يُحسب الرقم (قيمة فارغة).
+        risk_from_entry = ideal_entry - stop_loss
 
         resistance_room_r = None
 
         if (
-            resistance > close_price
-            and risk_per_share_val > 0
+            resistance > ideal_entry
+            and risk_from_entry > 0
         ):
             resistance_room_r = round(
-                (resistance - close_price) / risk_per_share_val,
+                (resistance - ideal_entry) / risk_from_entry,
                 2
             )
 
             reasons.append(
-                f"📏 مساحة الصعود حتى المقاومة تعادل "
-                f"{resistance_room_r:.1f}x من حجم المخاطرة"
+                f"📏 مساحة الصعود من نقطة الدخول المقترحة حتى "
+                f"المقاومة تعادل {resistance_room_r:.1f}x من المخاطرة"
             )
 
             if resistance < risk["tp1"]:
                 exit_signals.append(
                     f"⚠️ المقاومة ({resistance:.2f}) أقرب من الهدف الأول - "
-                    f"مساحة الصعود المتاحة تعادل {resistance_room_r:.1f}x من المخاطرة"
+                    f"مساحة الصعود من الدخول المقترح تعادل "
+                    f"{resistance_room_r:.1f}x من المخاطرة"
                 )
 
         if not exit_signals:
