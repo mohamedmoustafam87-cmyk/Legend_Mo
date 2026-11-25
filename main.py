@@ -91,6 +91,7 @@ def send_portfolio_report():
 
     except Exception as e:
         print(f"❌ Error sending portfolio report: {e}")
+        raise
 
 
 def main():

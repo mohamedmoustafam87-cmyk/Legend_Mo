@@ -49,7 +49,7 @@ def safe_send_message(chat_id, text):
             print(
                 f"❌ فشل الإرسال حتى كنص عادي: {plain_error}"
             )
-            return False
+            raise plain_error
 
 
 # ==========================================================
@@ -639,3 +639,4 @@ def send_scanner_report(opportunities):
         print(
             f"❌ Error sending report: {e}"
         )
+        raise
