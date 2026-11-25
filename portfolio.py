@@ -4,15 +4,18 @@ from indicators import calculate_indicators
 
 # قائمة محفظتك المحدثة مع الكميات وأسعار التكلفة
 MY_PORTFOLIO = {
-    "EFIH": {"shares": 736, "buy_price": 24.11},
+    "EGAL": {"shares": 16, "buy_price": 295.30},
     "NIPH": {"shares": 75, "buy_price": 344.14},
     "KORA": {"shares": 1430, "buy_price": 6.70},
-    "GTWL": {"shares": 72, "buy_price": 236.85},
+    "GTWL": {"shares": 124, "buy_price": 197.859},
     "MILS": {"shares": 44, "buy_price": 207.65},
     "ACGC": {"shares": 700, "buy_price": 14.785},
     "SPMD": {"shares": 10000, "buy_price": 0.52},
     "MASR": {"shares": 1104, "buy_price": 8.28},
     "SIPC": {"shares": 614, "buy_price": 6.51},
+    "ETEL": {"shares": 79, "buy_price": 141.133},
+    "ALCN": {"shares": 145, "buy_price": 35.133},
+    "EXPA": {"shares": 264, "buy_price": 15.849},
 }
 
 def analyze_user_portfolio():
