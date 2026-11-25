@@ -456,6 +456,12 @@ def send_scanner_report(opportunities):
                     f"📏 *البعد عن EMA20:* "
                     f"`{distance_from_ema:+.1f}%`\n\n"
 
+                    f"📍 *الدعم:* "
+                    f"`{support:.2f}` ج.م\n"
+
+                    f"🚧 *المقاومة:* "
+                    f"`{resistance:.2f}` ج.م\n\n"
+
 
                     # --------------------------------------------------
                     # Trend Indicators
@@ -522,14 +528,8 @@ def send_scanner_report(opportunities):
 
 
                     # --------------------------------------------------
-                    # Support / Resistance & Exit Strategy
+                    # Exit Strategy
                     # --------------------------------------------------
-
-                    f"📍 *الدعم:* "
-                    f"`{support:.2f}` ج.م\n"
-
-                    f"🚧 *المقاومة:* "
-                    f"`{resistance:.2f}` ج.م\n\n"
 
                     f"🚪 *خطة وإشارات الخروج:* \n"
                     f"{exit_strategy}\n\n"
