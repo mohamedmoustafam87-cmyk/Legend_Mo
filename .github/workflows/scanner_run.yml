@@ -10,6 +10,9 @@ on:
   schedule:
     - cron: '0,10,20,30,40,50 10-15 * * 0-4'
       timezone: "Africa/Cairo"
+    # Fallback trigger in UTC (hours cover Cairo winter and summer time). The
+    # script decides from the Cairo clock, so extra ticks are harmless.
+    - cron: '5,15,25,35,45,55 7-13 * * 0-4'
 permissions:
   contents: write
 concurrency:
