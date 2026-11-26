@@ -13,7 +13,7 @@ import os, sys, json, hashlib
 # key only, and only when it still has zero receipts and no failure data.
 PROVEN_NOT_SENT = ('original-report:owner-original-report-2026-11-25T19:56:28-Cairo'
                    ':receipt-confirmed-retry')
-ATTEMPT = 'original-report:owner-original-report-2026-11-25T19:56:28-Cairo:attempt-2'
+ATTEMPT = 'original-report:owner-manual-2026-11-26T12:05-Cairo:attempt-1'
 
 
 def reconcile(journal):
